@@ -71,9 +71,9 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
-                        <h6 class="card-title text-primary">Aylık İşçilik</h6>
-                        <h3 class="mb-0">₺{{ "%.2f"|format(stats.aylik_iscilik) }}</h3>
-                        <small class="text-muted">Bu ay toplam</small>
+                        <h6 class="card-title text-primary">Aylık Personel</h6>
+                        <h3 class="mb-0">₺{{ "%.2f"|format(stats.aylik_personel) }}</h3>
+                        <small class="text-muted">Maaş toplamı</small>
                     </div>
                     <div class="align-self-center">
                         <i class="fas fa-lira-sign fa-2x text-primary"></i>
@@ -186,32 +186,32 @@
         </div>
     </div>
     
-    <!-- Son İşçilik Kayıtları -->
+    <!-- Son Görev Kayıtları -->
     <div class="col-lg-4 mb-4">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
-                    <i class="fas fa-users me-2"></i>Son İşçilik Kayıtları
+                    <i class="fas fa-tasks me-2"></i>Son Görev Kayıtları
                 </h5>
-                <a href="{{ url_for('iscilik') }}" class="btn btn-sm btn-outline-primary">
+                <a href="{{ url_for('personel') }}" class="btn btn-sm btn-outline-primary">
                     Tümünü Gör
                 </a>
             </div>
             <div class="card-body p-0">
-                {% if son_iscilik %}
+                {% if son_gorevler %}
                 <div class="list-group list-group-flush">
-                    {% for iscilik in son_iscilik %}
+                    {% for gorev in son_gorevler %}
                     <div class="list-group-item">
                         <div class="d-flex justify-content-between">
                             <div>
-                                <h6 class="mb-1">{{ iscilik.isci_adi }}</h6>
-                                <p class="mb-1 text-muted small">{{ iscilik.gorev }}</p>
-                                <small class="text-muted">{{ iscilik.tarih }}</small>
+                                <h6 class="mb-1">{{ gorev.personel_adi or 'Bilinmeyen' }}</h6>
+                                <p class="mb-1 text-muted small">{{ gorev.gorev }}</p>
+                                <small class="text-muted">{{ gorev.tarih }}</small>
                             </div>
                             <div class="text-end">
-                                <strong>₺{{ "%.2f"|format(iscilik.toplam_ucret) }}</strong>
-                                <br>
-                                <small class="text-muted">{{ "%.1f"|format(iscilik.sure) }} saat</small>
+                                <span class="badge bg-{% if gorev.durum == 'Tamamlandı' %}success{% else %}warning{% endif %}">
+                                    {{ gorev.durum }}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -219,8 +219,8 @@
                 </div>
                 {% else %}
                 <div class="text-center py-4 text-muted">
-                    <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
-                    <p>Henüz işçilik kaydı bulunmuyor</p>
+                    <i class="fas fa-tasks fa-3x mb-3 opacity-50"></i>
+                    <p>Henüz görev kaydı bulunmuyor</p>
                 </div>
                 {% endif %}
             </div>
@@ -255,8 +255,8 @@
                         </a>
                     </div>
                     <div class="col-md-3 mb-2">
-                        <a href="{{ url_for('iscilik') }}" class="btn btn-outline-primary w-100">
-                            <i class="fas fa-user-plus me-2"></i>İşçilik Kaydet
+                        <a href="{{ url_for('personel') }}" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-user-plus me-2"></i>Personel Yönet
                         </a>
                     </div>
                 </div>

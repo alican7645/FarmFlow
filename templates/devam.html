@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Devam Takibi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-calendar-check me-2"></i>
+            Devam Takibi
+        </h1>
+        <p class="text-muted">Personelin günlük devam durumunu takip edebilirsiniz.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#devamKayitModal">
+            <i class="fas fa-calendar-plus me-2"></i>Devam Kaydet
+        </button>
+    </div>
+</div>
+
+<!-- Bugünkü Devam Durumu -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-calendar-day me-2"></i>Bugünkü Devam Durumu ({{ bugun }})
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if personeller %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Personel Adı</th>
+                        <th>Durum</th>
+                        <th>Giriş Saati</th>
+                        <th>Çıkış Saati</th>
+                        <th>Notlar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for personel in personeller %}
+                    {% set devam_var = bugun_devam|selectattr('personel_id', 'equalto', personel.id)|first %}
+                    <tr>
+                        <td><strong>{{ personel.personel_adi }}</strong></td>
+                        <td>
+                            {% if devam_var %}
+                                <span class="badge bg-{% if devam_var.durum == 'Geldi' %}success{% elif devam_var.durum == 'İzinli' %}info{% elif devam_var.durum == 'Rapor' %}warning{% else %}danger{% endif %}">
+                                    {{ devam_var.durum }}
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">Kayıt Yok</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ devam_var.giris_saati if devam_var else '-' }}</td>
+                        <td>{{ devam_var.cikis_saati if devam_var else '-' }}</td>
+                        <td>
+                            {% if devam_var and devam_var.notlar %}
+                            <small class="text-muted">{{ devam_var.notlar }}</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Aktif personel bulunmuyor</h5>
+            <p class="text-muted">Önce personel ekleyip, devam takibi yapabilirsiniz.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Son 7 Günün İstatistikleri -->
+{% if devam_istatistik %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-line me-2"></i>Son 7 Günün Devam İstatistikleri
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Toplam Personel</th>
+                        <th>Gelenler</th>
+                        <th>Gelmeyenler</th>
+                        <th>İzinliler</th>
+                        <th>Devam Oranı</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for istatistik in devam_istatistik %}
+                    <tr>
+                        <td><strong>{{ istatistik.tarih }}</strong></td>
+                        <td>{{ istatistik.toplam_personel }}</td>
+                        <td>
+                            <span class="badge bg-success">{{ istatistik.gelenler }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-danger">{{ istatistik.gelmeyenler }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ istatistik.izinliler }}</span>
+                        </td>
+                        <td>
+                            {% set oran = (istatistik.gelenler / istatistik.toplam_personel * 100) if istatistik.toplam_personel > 0 else 0 %}
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-{% if oran >= 90 %}success{% elif oran >= 75 %}warning{% else %}danger{% endif %}" 
+                                     style="width: {{ oran }}%">
+                                    {{ "%.1f"|format(oran) }}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Devam Kayıt Modal -->
+<div class="modal fade" id="devamKayitModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-calendar-plus me-2"></i>Günlük Devam Kaydı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Tarih *</label>
+                            <input type="date" name="tarih" class="form-control" value="{{ bugun }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Not:</strong> Tüm aktif personel için devam durumunu işaretleyin. Giriş ve çıkış saatleri opsiyoneldir.
+                    </div>
+                    
+                    {% if personeller %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 25%">Personel Adı</th>
+                                    <th style="width: 20%">Durum</th>
+                                    <th style="width: 15%">Giriş Saati</th>
+                                    <th style="width: 15%">Çıkış Saati</th>
+                                    <th style="width: 25%">Notlar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for personel in personeller %}
+                                {% set mevcut_devam = bugun_devam|selectattr('personel_id', 'equalto', personel.id)|first %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ personel.personel_adi }}</strong>
+                                        <br><small class="text-muted">{{ personel.pozisyon or 'Pozisyon belirtilmemiş' }}</small>
+                                    </td>
+                                    <td>
+                                        <select name="durum_{{ personel.id }}" class="form-select form-select-sm">
+                                            <option value="Geldi" {% if mevcut_devam and mevcut_devam.durum == 'Geldi' %}selected{% endif %}>Geldi</option>
+                                            <option value="Gelmedi" {% if mevcut_devam and mevcut_devam.durum == 'Gelmedi' %}selected{% elif not mevcut_devam %}selected{% endif %}>Gelmedi</option>
+                                            <option value="İzinli" {% if mevcut_devam and mevcut_devam.durum == 'İzinli' %}selected{% endif %}>İzinli</option>
+                                            <option value="Rapor" {% if mevcut_devam and mevcut_devam.durum == 'Rapor' %}selected{% endif %}>Rapor</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="time" name="giris_{{ personel.id }}" class="form-control form-control-sm" 
+                                               value="{{ mevcut_devam.giris_saati if mevcut_devam else '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="time" name="cikis_{{ personel.id }}" class="form-control form-control-sm" 
+                                               value="{{ mevcut_devam.cikis_saati if mevcut_devam else '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="text" name="notlar_{{ personel.id }}" class="form-control form-control-sm" 
+                                               placeholder="İsteğe bağlı notlar" 
+                                               value="{{ mevcut_devam.notlar if mevcut_devam else '' }}">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">Aktif personel bulunmuyor</h5>
+                        <p class="text-muted">Önce personel eklemelisiniz.</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    {% if personeller %}
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Devam Durumunu Kaydet
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Hızlı İşlemler -->
+<div class="row">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>Hızlı İşlemler
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('personel') }}" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-user-plus me-2"></i>Personel Ekle
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#devamKayitModal">
+                            <i class="fas fa-calendar-check me-2"></i>Devam Kaydet
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('rapor') }}" class="btn btn-outline-info w-100">
+                            <i class="fas fa-chart-bar me-2"></i>Personel Raporu
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

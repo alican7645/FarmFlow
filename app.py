@@ -44,20 +44,44 @@ def init_db():
         notlar TEXT
     )''')
 
-    # İşçilik Tablosu
-    c.execute('''CREATE TABLE IF NOT EXISTS iscilik (
+    # Personel Tablosu (Çalışan Bilgileri)
+    c.execute('''CREATE TABLE IF NOT EXISTS personel (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        isci_adi TEXT NOT NULL,
+        personel_adi TEXT NOT NULL,
+        pozisyon TEXT,
+        aylik_maas REAL DEFAULT 0,
+        ise_baslama_tarihi TEXT,
+        aktif INTEGER DEFAULT 1,
+        telefon TEXT,
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    # Devam/Yoklama Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS devam (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        personel_id INTEGER NOT NULL,
+        tarih TEXT NOT NULL,
+        durum TEXT NOT NULL, -- 'Geldi', 'Gelmedi', 'İzinli', 'Rapor'
+        giris_saati TEXT,
+        cikis_saati TEXT,
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (personel_id) REFERENCES personel (id),
+        UNIQUE(personel_id, tarih)
+    )''')
+
+    # Görev Tablosu (İşçilik yerine)
+    c.execute('''CREATE TABLE IF NOT EXISTS gorevler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        personel_id INTEGER NOT NULL,
         gorev TEXT NOT NULL,
         tarih TEXT NOT NULL,
-        baslangic_saati TEXT,
-        bitis_saati TEXT,
-        sure REAL,
-        saatlik_ucret REAL DEFAULT 0,
-        toplam_ucret REAL DEFAULT 0,
         sera_adi TEXT,
         durum TEXT DEFAULT 'Tamamlandı',
-        notlar TEXT
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (personel_id) REFERENCES personel (id)
     )''')
 
     # Hasat Tablosu
@@ -99,11 +123,10 @@ def get_dashboard_stats():
         "SELECT COUNT(*) as count FROM stok WHERE miktar <= min_stok AND min_stok > 0"
     ).fetchone()['count']
     
-    # Bu ayki toplam işçilik maliyeti
+    # Bu ayki toplam personel maliyeti (sadece aktif personel)
     bu_ay = datetime.now().strftime('%Y-%m')
-    aylik_iscilik = conn.execute(
-        "SELECT COALESCE(SUM(toplam_ucret), 0) as total FROM iscilik WHERE tarih LIKE ?",
-        (f"{bu_ay}%",)
+    aylik_personel = conn.execute(
+        "SELECT COALESCE(SUM(aylik_maas), 0) as total FROM personel WHERE aktif = 1"
     ).fetchone()['total']
     
     # Toplam sera sayısı
@@ -122,7 +145,7 @@ def get_dashboard_stats():
     return {
         'aktif_uretim': aktif_uretim,
         'dusuk_stok': dusuk_stok,
-        'aylik_iscilik': aylik_iscilik,
+        'aylik_personel': aylik_personel,
         'sera_sayisi': sera_sayisi,
         'bu_ay_hasat': bu_ay_hasat
     }
@@ -148,8 +171,8 @@ def dashboard():
         "SELECT * FROM stok ORDER BY tarih DESC LIMIT 5"
     ).fetchall()
     
-    son_iscilik = conn.execute(
-        "SELECT * FROM iscilik ORDER BY tarih DESC LIMIT 5"
+    son_gorevler = conn.execute(
+        "SELECT g.*, p.personel_adi FROM gorevler g LEFT JOIN personel p ON g.personel_id = p.id ORDER BY g.tarih DESC LIMIT 5"
     ).fetchall()
     
     conn.close()
@@ -158,7 +181,7 @@ def dashboard():
                          stats=stats,
                          son_uretim=son_uretim,
                          son_stok=son_stok,
-                         son_iscilik=son_iscilik)
+                         son_gorevler=son_gorevler)
 
 @app.route("/uretim", methods=["GET", "POST"])
 def uretim():
@@ -297,86 +320,174 @@ def stok():
     
     return render_template("stok.html", stoklar=stoklar, dusuk_stoklar=dusuk_stoklar)
 
-@app.route("/iscilik", methods=["GET", "POST"])
-def iscilik():
+@app.route("/personel", methods=["GET", "POST"])
+def personel():
     conn = get_db_connection()
     
     if request.method == "POST":
-        try:
-            isci_adi = request.form['isci_adi'].strip()
-            gorev = request.form['gorev'].strip()
-            tarih = request.form['tarih']
-            baslangic_saati = request.form.get('baslangic_saati', '').strip()
-            bitis_saati = request.form.get('bitis_saati', '').strip()
-            saatlik_ucret = float(request.form.get('saatlik_ucret', 0) or 0)
-            sera_adi = request.form.get('sera_adi', '').strip()
-            notlar = request.form.get('notlar', '').strip()
-            
-            # Çalışma süresini hesapla
-            sure = 0
-            toplam_ucret = 0
-            
-            if baslangic_saati and bitis_saati:
-                try:
-                    baslangic = datetime.strptime(baslangic_saati, '%H:%M')
-                    bitis = datetime.strptime(bitis_saati, '%H:%M')
-                    sure = (bitis - baslangic).total_seconds() / 3600
-                    if sure < 0:
-                        sure += 24  # Gece vardiyası için
-                except ValueError:
-                    flash('Saat formatı hatalı! (HH:MM)', 'error')
-                    sure = 0
-            else:
-                sure = float(request.form.get('sure', 0) or 0)
-            
-            toplam_ucret = sure * saatlik_ucret
-            
-            if not isci_adi or not gorev or not tarih:
-                flash('İşçi adı, görev ve tarih zorunludur!', 'error')
-            else:
-                conn.execute("""
-                    INSERT INTO iscilik (isci_adi, gorev, tarih, baslangic_saati, bitis_saati,
-                                       sure, saatlik_ucret, toplam_ucret, sera_adi, notlar) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (isci_adi, gorev, tarih, baslangic_saati, bitis_saati, sure, 
-                      saatlik_ucret, toplam_ucret, sera_adi, notlar))
-                conn.commit()
-                flash('İşçilik kaydı başarıyla eklendi!', 'success')
-                return redirect(url_for('iscilik'))
+        action = request.form.get('action', '')
+        
+        if action == 'personel_ekle':
+            try:
+                personel_adi = request.form['personel_adi'].strip()
+                pozisyon = request.form.get('pozisyon', '').strip()
+                aylik_maas = float(request.form.get('aylik_maas', 0) or 0)
+                ise_baslama_tarihi = request.form.get('ise_baslama_tarihi')
+                telefon = request.form.get('telefon', '').strip()
+                notlar = request.form.get('notlar', '').strip()
                 
-        except ValueError:
-            flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
-        except Exception as e:
-            flash(f'Bir hata oluştu: {str(e)}', 'error')
+                if not personel_adi:
+                    flash('Personel adı zorunludur!', 'error')
+                else:
+                    conn.execute("""
+                        INSERT INTO personel (personel_adi, pozisyon, aylik_maas, ise_baslama_tarihi, telefon, notlar) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (personel_adi, pozisyon, aylik_maas, ise_baslama_tarihi, telefon, notlar))
+                    conn.commit()
+                    flash('Personel kaydı başarıyla eklendi!', 'success')
+                    return redirect(url_for('personel'))
+                    
+            except ValueError:
+                flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
+            except Exception as e:
+                flash(f'Bir hata oluştu: {str(e)}', 'error')
+        
+        elif action == 'gorev_ekle':
+            try:
+                personel_id = request.form['personel_id']
+                gorev = request.form['gorev'].strip()
+                tarih = request.form['tarih']
+                sera_adi = request.form.get('sera_adi', '').strip()
+                notlar = request.form.get('notlar', '').strip()
+                
+                if not personel_id or not gorev or not tarih:
+                    flash('Personel, görev ve tarih zorunludur!', 'error')
+                else:
+                    conn.execute("""
+                        INSERT INTO gorevler (personel_id, gorev, tarih, sera_adi, notlar) 
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (personel_id, gorev, tarih, sera_adi, notlar))
+                    conn.commit()
+                    flash('Görev kaydı başarıyla eklendi!', 'success')
+                    return redirect(url_for('personel'))
+                    
+            except Exception as e:
+                flash(f'Bir hata oluştu: {str(e)}', 'error')
     
-    # İşçilik kayıtları ve istatistikler
-    iscilikler = conn.execute("SELECT * FROM iscilik ORDER BY tarih DESC, isci_adi").fetchall()
+    # Personel listesi
+    personeller = conn.execute("SELECT * FROM personel ORDER BY aktif DESC, personel_adi").fetchall()
+    
+    # Görev kayıtları
+    gorevler = conn.execute("""
+        SELECT g.*, p.personel_adi 
+        FROM gorevler g 
+        LEFT JOIN personel p ON g.personel_id = p.id 
+        ORDER BY g.tarih DESC
+    """).fetchall()
     
     # Bu ayki toplam maliyet
-    bu_ay = datetime.now().strftime('%Y-%m')
-    bu_ay_toplam = conn.execute(
-        "SELECT COALESCE(SUM(toplam_ucret), 0) as total FROM iscilik WHERE tarih LIKE ?",
-        (f"{bu_ay}%",)
+    bu_ay_toplam_maas = conn.execute(
+        "SELECT COALESCE(SUM(aylik_maas), 0) as total FROM personel WHERE aktif = 1"
     ).fetchone()['total']
     
-    # İşçi bazında özetler
-    isci_ozetleri = conn.execute("""
-        SELECT isci_adi, 
-               COUNT(*) as gorev_sayisi,
-               SUM(sure) as toplam_sure,
-               SUM(toplam_ucret) as toplam_kazanc
-        FROM iscilik 
-        WHERE tarih LIKE ?
-        GROUP BY isci_adi
-        ORDER BY toplam_kazanc DESC
+    # Personel istatistikleri
+    bu_ay = datetime.now().strftime('%Y-%m')
+    personel_istatistik = conn.execute("""
+        SELECT p.personel_adi, p.aylik_maas,
+               COUNT(g.id) as gorev_sayisi
+        FROM personel p 
+        LEFT JOIN gorevler g ON p.id = g.personel_id AND g.tarih LIKE ?
+        WHERE p.aktif = 1
+        GROUP BY p.id, p.personel_adi, p.aylik_maas
+        ORDER BY p.personel_adi
     """, (f"{bu_ay}%",)).fetchall()
     
     conn.close()
     
-    return render_template("iscilik.html", 
-                         iscilikler=iscilikler,
-                         bu_ay_toplam=bu_ay_toplam,
-                         isci_ozetleri=isci_ozetleri)
+    return render_template("personel.html", 
+                         personeller=personeller,
+                         gorevler=gorevler,
+                         bu_ay_toplam_maas=bu_ay_toplam_maas,
+                         personel_istatistik=personel_istatistik)
+
+@app.route("/devam", methods=["GET", "POST"])
+def devam():
+    conn = get_db_connection()
+    
+    if request.method == "POST":
+        try:
+            tarih = request.form['tarih']
+            
+            # Tüm aktif personel için devam durumunu kaydet
+            personeller = conn.execute("SELECT * FROM personel WHERE aktif = 1").fetchall()
+            
+            for personel in personeller:
+                durum = request.form.get(f'durum_{personel["id"]}', 'Gelmedi')
+                giris_saati = request.form.get(f'giris_{personel["id"]}', '').strip()
+                cikis_saati = request.form.get(f'cikis_{personel["id"]}', '').strip()
+                notlar = request.form.get(f'notlar_{personel["id"]}', '').strip()
+                
+                # Mevcut kaydı kontrol et
+                mevcut = conn.execute(
+                    "SELECT * FROM devam WHERE personel_id = ? AND tarih = ?",
+                    (personel['id'], tarih)
+                ).fetchone()
+                
+                if mevcut:
+                    # Güncelle
+                    conn.execute("""
+                        UPDATE devam 
+                        SET durum = ?, giris_saati = ?, cikis_saati = ?, notlar = ?
+                        WHERE personel_id = ? AND tarih = ?
+                    """, (durum, giris_saati, cikis_saati, notlar, personel['id'], tarih))
+                else:
+                    # Yeni kayıt
+                    conn.execute("""
+                        INSERT INTO devam (personel_id, tarih, durum, giris_saati, cikis_saati, notlar) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (personel['id'], tarih, durum, giris_saati, cikis_saati, notlar))
+            
+            conn.commit()
+            flash('Devam durumu başarıyla kaydedildi!', 'success')
+            return redirect(url_for('devam'))
+            
+        except Exception as e:
+            flash(f'Bir hata oluştu: {str(e)}', 'error')
+    
+    # Bugünün tarihi
+    bugun = datetime.now().strftime('%Y-%m-%d')
+    
+    # Aktif personel listesi
+    personeller = conn.execute("SELECT * FROM personel WHERE aktif = 1 ORDER BY personel_adi").fetchall()
+    
+    # Bugünkü devam durumu
+    bugun_devam = conn.execute("""
+        SELECT d.*, p.personel_adi 
+        FROM devam d 
+        LEFT JOIN personel p ON d.personel_id = p.id 
+        WHERE d.tarih = ?
+    """, (bugun,)).fetchall()
+    
+    # Son 7 günün devam istatistikleri
+    devam_istatistik = conn.execute("""
+        SELECT d.tarih,
+               COUNT(*) as toplam_personel,
+               SUM(CASE WHEN d.durum = 'Geldi' THEN 1 ELSE 0 END) as gelenler,
+               SUM(CASE WHEN d.durum = 'Gelmedi' THEN 1 ELSE 0 END) as gelmeyenler,
+               SUM(CASE WHEN d.durum = 'İzinli' THEN 1 ELSE 0 END) as izinliler
+        FROM devam d 
+        WHERE d.tarih >= date('now', '-7 days')
+        GROUP BY d.tarih
+        ORDER BY d.tarih DESC
+    """).fetchall()
+    
+    conn.close()
+    
+    return render_template("devam.html", 
+                         personeller=personeller,
+                         bugun_devam=bugun_devam,
+                         devam_istatistik=devam_istatistik,
+                         bugun=bugun)
 
 @app.route("/hasat", methods=["GET", "POST"])
 def hasat():
@@ -477,15 +588,13 @@ def rapor():
         ORDER BY toplam_deger DESC
     """).fetchall()
     
-    # İşçilik maliyeti trendi
-    iscilik_raporu = conn.execute("""
-        SELECT strftime('%Y-%m', tarih) as ay,
-               COUNT(DISTINCT isci_adi) as isci_sayisi,
-               SUM(sure) as toplam_sure,
-               SUM(toplam_ucret) as toplam_maliyet
-        FROM iscilik 
-        WHERE tarih >= date('now', '-12 months')
-        GROUP BY strftime('%Y-%m', tarih)
+    # Personel maliyeti trendi
+    personel_raporu = conn.execute("""
+        SELECT strftime('%Y-%m', 'now', '-' || (t.value-1) || ' months') as ay,
+               (SELECT COUNT(*) FROM personel WHERE aktif = 1) as personel_sayisi,
+               (SELECT SUM(aylik_maas) FROM personel WHERE aktif = 1) as toplam_maliyet
+        FROM (SELECT 1 as value UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 
+              UNION SELECT 7 UNION SELECT 8 UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 UNION SELECT 12) t
         ORDER BY ay DESC
     """).fetchall()
     
@@ -494,7 +603,7 @@ def rapor():
     return render_template('rapor.html',
                          uretim_raporu=uretim_raporu,
                          stok_raporu=stok_raporu,
-                         iscilik_raporu=iscilik_raporu)
+                         personel_raporu=personel_raporu)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
