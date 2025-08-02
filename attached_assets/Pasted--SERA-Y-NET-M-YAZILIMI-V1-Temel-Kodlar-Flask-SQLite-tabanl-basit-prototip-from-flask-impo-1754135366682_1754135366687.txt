@@ -1,0 +1,81 @@
+# SERA YÖNETİM YAZILIMI - V1 (Temel Kodlar)
+# Flask + SQLite tabanlı basit prototip
+
+from flask import Flask, render_template, request, redirect, url_for
+from datetime import datetime
+import sqlite3
+
+app = Flask(__name__)
+
+# --- DATABASE OLUŞTURMA ---
+
+def init_db():
+    conn = sqlite3.connect('sera.db')
+    c = conn.cursor()
+
+    # Üretim Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS uretim (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sera_adi TEXT,
+        urun_adi TEXT,
+        ekim_tarihi TEXT,
+        hasat_tarihi TEXT,
+        durum TEXT
+    )''')
+
+    # Stok Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS stok (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        malzeme_adi TEXT,
+        miktar REAL,
+        tarih TEXT,
+        depo TEXT
+    )''')
+
+    # İşçilik Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS iscilik (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        isci_adi TEXT,
+        gorev TEXT,
+        tarih TEXT,
+        sure REAL,
+        ucret REAL
+    )''')
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- ANASAYFA ---
+@app.route("/")
+def index():
+    return "Sera Yönetim Sistemi V1 - Hoş Geldiniz"
+
+# --- ÜRETİM GİRİŞİ ---
+@app.route("/uretim", methods=["GET", "POST"])
+def uretim():
+    conn = sqlite3.connect('sera.db')
+    c = conn.cursor()
+
+    if request.method == "POST":
+        sera_adi = request.form['sera_adi']
+        urun_adi = request.form['urun_adi']
+        ekim_tarihi = request.form['ekim_tarihi']
+        hasat_tarihi = request.form['hasat_tarihi']
+        durum = "Ekim Yapıldı"
+        
+        c.execute("INSERT INTO uretim (sera_adi, urun_adi, ekim_tarihi, hasat_tarihi, durum) VALUES (?, ?, ?, ?, ?)",
+                  (sera_adi, urun_adi, ekim_tarihi, hasat_tarihi, durum))
+        conn.commit()
+
+    c.execute("SELECT * FROM uretim")
+    uretimler = c.fetchall()
+    conn.close()
+    
+    return render_template("uretim.html", uretimler=uretimler)
+
+# Diğer modüller (stok, isçilik) ayrı route olarak yazılacak
+
+if __name__ == "__main__":
+    app.run(debug=True)
