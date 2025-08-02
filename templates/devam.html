@@ -22,13 +22,7 @@
                 </button>
                 <ul class="dropdown-menu">
                     <li><a class="dropdown-item" href="{{ url_for('devam_excel_export') }}">
-                        <i class="fas fa-download me-2"></i>Son 30 Gün
-                    </a></li>
-                    <li><a class="dropdown-item" href="{{ url_for('devam_excel_export', baslangic=(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'), bitis=datetime.now().strftime('%Y-%m-%d')) }}">
-                        <i class="fas fa-download me-2"></i>Son 7 Gün
-                    </a></li>
-                    <li><a class="dropdown-item" href="{{ url_for('devam_excel_export', baslangic=(datetime.now().replace(day=1)).strftime('%Y-%m-%d'), bitis=datetime.now().strftime('%Y-%m-%d')) }}">
-                        <i class="fas fa-download me-2"></i>Bu Ay
+                        <i class="fas fa-download me-2"></i>Son 30 Gün (Varsayılan)
                     </a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#excelExportModal">
@@ -294,13 +288,11 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Başlangıç Tarihi *</label>
-                            <input type="date" id="exportBaslangic" class="form-control" required 
-                                   value="{{ (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d') }}">
+                            <input type="date" id="exportBaslangic" class="form-control" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Bitiş Tarihi *</label>
-                            <input type="date" id="exportBitis" class="form-control" required 
-                                   value="{{ datetime.now().strftime('%Y-%m-%d') }}">
+                            <input type="date" id="exportBitis" class="form-control" required>
                         </div>
                     </div>
                     <div class="alert alert-info">
@@ -323,6 +315,15 @@
 
 {% block scripts %}
 <script>
+// Modal açıldığında varsayılan tarihleri ayarla
+document.getElementById('excelExportModal').addEventListener('show.bs.modal', function () {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+    
+    document.getElementById('exportBaslangic').value = thirtyDaysAgo.toISOString().split('T')[0];
+    document.getElementById('exportBitis').value = today.toISOString().split('T')[0];
+});
+
 function exportCustomRange() {
     const baslangic = document.getElementById('exportBaslangic').value;
     const bitis = document.getElementById('exportBitis').value;
