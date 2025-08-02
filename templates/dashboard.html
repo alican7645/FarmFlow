@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}Ana Sayfa - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-tachometer-alt me-2"></i>
+            Sera Yönetim Paneli
+        </h1>
+        <p class="text-muted">Sera operasyonlarınızın genel durumunu buradan takip edebilirsiniz.</p>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Aktif Üretim</h6>
+                        <h3 class="mb-0">{{ stats.aktif_uretim }}</h3>
+                        <small class="text-muted">Devam eden ekim</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-seedling fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-info">Sera Sayısı</h6>
+                        <h3 class="mb-0">{{ stats.sera_sayisi }}</h3>
+                        <small class="text-muted">Aktif sera</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-home fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card border-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-warning">Düşük Stok</h6>
+                        <h3 class="mb-0">{{ stats.dusuk_stok }}</h3>
+                        <small class="text-muted">Uyarı gerekli</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Aylık İşçilik</h6>
+                        <h3 class="mb-0">₺{{ "%.2f"|format(stats.aylik_iscilik) }}</h3>
+                        <small class="text-muted">Bu ay toplam</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-lira-sign fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Son Aktiviteler -->
+<div class="row">
+    <!-- Son Üretim Kayıtları -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-leaf me-2"></i>Son Üretim Kayıtları
+                </h5>
+                <a href="{{ url_for('uretim') }}" class="btn btn-sm btn-outline-primary">
+                    Tümünü Gör
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if son_uretim %}
+                <div class="list-group list-group-flush">
+                    {% for uretim in son_uretim %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="mb-1">{{ uretim.urun_adi }}</h6>
+                                <p class="mb-1 text-muted small">{{ uretim.sera_adi }}</p>
+                                <small class="text-muted">{{ uretim.ekim_tarihi }}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-{% if uretim.durum == 'Hasat Edildi' %}success{% elif uretim.durum == 'Ekim Yapıldı' %}primary{% else %}warning{% endif %}">
+                                    {{ uretim.durum }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-leaf fa-3x mb-3 opacity-50"></i>
+                    <p>Henüz üretim kaydı bulunmuyor</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Son Stok Hareketleri -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-boxes me-2"></i>Son Stok Hareketleri
+                </h5>
+                <a href="{{ url_for('stok') }}" class="btn btn-sm btn-outline-primary">
+                    Tümünü Gör
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if son_stok %}
+                <div class="list-group list-group-flush">
+                    {% for stok in son_stok %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="mb-1">{{ stok.malzeme_adi }}</h6>
+                                <p class="mb-1 text-muted small">{{ stok.depo or 'Genel Depo' }}</p>
+                                <small class="text-muted">{{ stok.tarih }}</small>
+                            </div>
+                            <div class="text-end">
+                                <strong>{{ stok.miktar }} {{ stok.birim or 'adet' }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-boxes fa-3x mb-3 opacity-50"></i>
+                    <p>Henüz stok kaydı bulunmuyor</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Son İşçilik Kayıtları -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-users me-2"></i>Son İşçilik Kayıtları
+                </h5>
+                <a href="{{ url_for('iscilik') }}" class="btn btn-sm btn-outline-primary">
+                    Tümünü Gör
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if son_iscilik %}
+                <div class="list-group list-group-flush">
+                    {% for iscilik in son_iscilik %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="mb-1">{{ iscilik.isci_adi }}</h6>
+                                <p class="mb-1 text-muted small">{{ iscilik.gorev }}</p>
+                                <small class="text-muted">{{ iscilik.tarih }}</small>
+                            </div>
+                            <div class="text-end">
+                                <strong>₺{{ "%.2f"|format(iscilik.toplam_ucret) }}</strong>
+                                <br>
+                                <small class="text-muted">{{ "%.1f"|format(iscilik.sure) }} saat</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
+                    <p>Henüz işçilik kaydı bulunmuyor</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hızlı Erişim -->
+<div class="row">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>Hızlı İşlemler
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('uretim') }}" class="btn btn-outline-success w-100">
+                            <i class="fas fa-plus me-2"></i>Yeni Üretim
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('stok') }}" class="btn btn-outline-info w-100">
+                            <i class="fas fa-box me-2"></i>Stok Ekle
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('iscilik') }}" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-user-plus me-2"></i>İşçilik Kaydet
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('rapor') }}" class="btn btn-outline-secondary w-100">
+                            <i class="fas fa-chart-line me-2"></i>Rapor Görüntüle
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

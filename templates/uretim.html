@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Üretim Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-leaf me-2"></i>
+            Üretim Yönetimi
+        </h1>
+        <p class="text-muted">Sera üretim kayıtlarınızı buradan yönetebilirsiniz.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#yeniUretimModal">
+            <i class="fas fa-plus me-2"></i>Yeni Üretim Ekle
+        </button>
+    </div>
+</div>
+
+<!-- Üretim Listesi -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Üretim Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if uretimler %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Sera</th>
+                        <th>Ürün</th>
+                        <th>Ekim Tarihi</th>
+                        <th>Hasat Tarihi</th>
+                        <th>Alan (m²)</th>
+                        <th>Durum</th>
+                        <th>Verim</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for uretim in uretimler %}
+                    <tr>
+                        <td>
+                            <strong>{{ uretim.sera_adi }}</strong>
+                        </td>
+                        <td>{{ uretim.urun_adi }}</td>
+                        <td>{{ uretim.ekim_tarihi }}</td>
+                        <td>{{ uretim.hasat_tarihi or '-' }}</td>
+                        <td>{{ uretim.alan or '-' }}</td>
+                        <td>
+                            <span class="badge bg-{% if uretim.durum == 'Hasat Edildi' %}success{% elif uretim.durum == 'Ekim Yapıldı' %}primary{% else %}warning{% endif %}">
+                                {{ uretim.durum }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if uretim.gercek_verim %}
+                                <strong>{{ uretim.gercek_verim }} kg</strong>
+                                {% if uretim.beklenen_verim %}
+                                <br><small class="text-muted">Beklenen: {{ uretim.beklenen_verim }} kg</small>
+                                {% endif %}
+                            {% elif uretim.beklenen_verim %}
+                                <span class="text-muted">Beklenen: {{ uretim.beklenen_verim }} kg</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#guncelleModal{{ uretim.id }}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    
+                    <!-- Güncelleme Modal -->
+                    <div class="modal fade" id="guncelleModal{{ uretim.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form method="POST" action="{{ url_for('uretim_guncelle', id=uretim.id) }}">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Üretim Güncelle - {{ uretim.urun_adi }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Durum</label>
+                                            <select name="durum" class="form-select" required>
+                                                <option value="Ekim Yapıldı" {% if uretim.durum == 'Ekim Yapıldı' %}selected{% endif %}>Ekim Yapıldı</option>
+                                                <option value="Büyüme Döneminde" {% if uretim.durum == 'Büyüme Döneminde' %}selected{% endif %}>Büyüme Döneminde</option>
+                                                <option value="Çiçeklenme" {% if uretim.durum == 'Çiçeklenme' %}selected{% endif %}>Çiçeklenme</option>
+                                                <option value="Meyve Bağlama" {% if uretim.durum == 'Meyve Bağlama' %}selected{% endif %}>Meyve Bağlama</option>
+                                                <option value="Hasat Hazır" {% if uretim.durum == 'Hasat Hazır' %}selected{% endif %}>Hasat Hazır</option>
+                                                <option value="Hasat Edildi" {% if uretim.durum == 'Hasat Edildi' %}selected{% endif %}>Hasat Edildi</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Gerçek Verim (kg)</label>
+                                            <input type="number" name="gercek_verim" class="form-control" 
+                                                   value="{{ uretim.gercek_verim or '' }}" step="0.1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Notlar</label>
+                                            <textarea name="notlar" class="form-control" rows="3">{{ uretim.notlar or '' }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                                        <button type="submit" class="btn btn-primary">Güncelle</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-seedling fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz üretim kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk üretim kaydınızı eklemek için "Yeni Üretim Ekle" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni Üretim Modal -->
+<div class="modal fade" id="yeniUretimModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Yeni Üretim Ekle
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sera Adı *</label>
+                            <input type="text" name="sera_adi" class="form-control" required 
+                                   placeholder="Örn: 1 Nolu Sera">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Ürün Adı *</label>
+                            <input type="text" name="urun_adi" class="form-control" required 
+                                   placeholder="Örn: Domates, Salatalık">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Ekim Tarihi *</label>
+                            <input type="date" name="ekim_tarihi" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tahmini Hasat Tarihi</label>
+                            <input type="date" name="hasat_tarihi" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Ekim Alanı (m²)</label>
+                            <input type="number" name="alan" class="form-control" step="0.1" 
+                                   placeholder="Örn: 100">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Beklenen Verim (kg)</label>
+                            <input type="number" name="beklenen_verim" class="form-control" step="0.1" 
+                                   placeholder="Örn: 500">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="3" 
+                                  placeholder="Çeşit bilgisi, özel notlar..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

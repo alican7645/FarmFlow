@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Raporlar - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-chart-bar me-2"></i>
+            Raporlar ve Analizler
+        </h1>
+        <p class="text-muted">Sera operasyonlarınızın detaylı analizini görüntüleyin.</p>
+    </div>
+</div>
+
+<!-- Üretim Raporu -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-leaf me-2"></i>Aylık Üretim Raporu
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if uretim_raporu %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Ay</th>
+                        <th>Toplam Ekim</th>
+                        <th>Hasat Edilen</th>
+                        <th>Başarı Oranı</th>
+                        <th>Toplam Verim (kg)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rapor in uretim_raporu %}
+                    <tr>
+                        <td><strong>{{ rapor.ay }}</strong></td>
+                        <td>{{ rapor.toplam_ekim }}</td>
+                        <td>{{ rapor.hasat_edilen }}</td>
+                        <td>
+                            {% set basari_orani = (rapor.hasat_edilen / rapor.toplam_ekim * 100) if rapor.toplam_ekim > 0 else 0 %}
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-{% if basari_orani >= 80 %}success{% elif basari_orani >= 60 %}warning{% else %}danger{% endif %}" 
+                                     style="width: {{ basari_orani }}%">
+                                    {{ "%.1f"|format(basari_orani) }}%
+                                </div>
+                            </div>
+                        </td>
+                        <td><strong>{{ "%.1f"|format(rapor.toplam_verim) }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <i class="fas fa-chart-line fa-3x mb-3 opacity-50"></i>
+            <p>Henüz üretim verisi bulunmuyor</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stok Raporu -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-boxes me-2"></i>Kategori Bazında Stok Değeri
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if stok_raporu %}
+        <div class="row">
+            {% for rapor in stok_raporu %}
+            <div class="col-md-4 mb-3">
+                <div class="card border-info">
+                    <div class="card-body">
+                        <h6 class="card-title text-info">{{ rapor.kategori }}</h6>
+                        <h4 class="mb-1">₺{{ "%.2f"|format(rapor.toplam_deger) }}</h4>
+                        <small class="text-muted">{{ rapor.cesit_sayisi }} çeşit malzeme</small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <i class="fas fa-boxes fa-3x mb-3 opacity-50"></i>
+            <p>Henüz stok verisi bulunmuyor</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- İşçilik Maliyeti Trendi -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-users me-2"></i>Aylık İşçilik Maliyeti Trendi
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if iscilik_raporu %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Ay</th>
+                        <th>İşçi Sayısı</th>
+                        <th>Toplam Saat</th>
+                        <th>Toplam Maliyet</th>
+                        <th>Ortalama Saatlik</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rapor in iscilik_raporu %}
+                    <tr>
+                        <td><strong>{{ rapor.ay }}</strong></td>
+                        <td>{{ rapor.isci_sayisi }}</td>
+                        <td>{{ "%.1f"|format(rapor.toplam_sure) }} saat</td>
+                        <td><strong>₺{{ "%.2f"|format(rapor.toplam_maliyet) }}</strong></td>
+                        <td>₺{{ "%.2f"|format(rapor.toplam_maliyet / rapor.toplam_sure if rapor.toplam_sure > 0 else 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <i class="fas fa-chart-bar fa-3x mb-3 opacity-50"></i>
+            <p>Henüz işçilik verisi bulunmuyor</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-seedling me-2"></i>Toplam Üretim
+                </h5>
+                <h3>{{ uretim_raporu|sum(attribute='toplam_ekim') if uretim_raporu else 0 }}</h3>
+                <small>Son 12 ay</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-chart-line me-2"></i>Toplam Verim
+                </h5>
+                <h3>{{ "%.0f"|format(uretim_raporu|sum(attribute='toplam_verim') if uretim_raporu else 0) }} kg</h3>
+                <small>Son 12 ay</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-lira-sign me-2"></i>Stok Değeri
+                </h5>
+                <h3>₺{{ "%.0f"|format(stok_raporu|sum(attribute='toplam_deger') if stok_raporu else 0) }}</h3>
+                <small>Toplam stok</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-clock me-2"></i>Toplam Saat
+                </h5>
+                <h3>{{ "%.0f"|format(iscilik_raporu|sum(attribute='toplam_sure') if iscilik_raporu else 0) }}</h3>
+                <small>Son 12 ay</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 text-center">
+            <h1 class="display-4 mb-4">
+                <i class="fas fa-seedling me-3 text-success"></i>
+                Sera Yönetim Sistemi
+            </h1>
+            <p class="lead mb-5">Sera üretim, stok ve işçilik yönetimi için kapsamlı çözüm</p>
+            
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-leaf fa-3x text-success mb-3"></i>
+                            <h5>Üretim Takibi</h5>
+                            <p class="text-muted">Ekim, büyüme ve hasat süreçlerini takip edin</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-boxes fa-3x text-info mb-3"></i>
+                            <h5>Stok Yönetimi</h5>
+                            <p class="text-muted">Malzeme stoklarınızı kontrol altında tutun</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                            <h5>İşçilik Takibi</h5>
+                            <p class="text-muted">Çalışan performansı ve maliyetlerini yönetin</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <a href="{{ url_for('dashboard') }}" class="btn btn-success btn-lg">
+                <i class="fas fa-tachometer-alt me-2"></i>
+                Yönetim Paneline Git
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

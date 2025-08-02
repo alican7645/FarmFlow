@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Stok Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-boxes me-2"></i>
+            Stok Yönetimi
+        </h1>
+        <p class="text-muted">Sera malzemelerinizin stok durumunu buradan takip edebilirsiniz.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#yeniStokModal">
+            <i class="fas fa-plus me-2"></i>Stok İşlemi
+        </button>
+    </div>
+</div>
+
+<!-- Düşük Stok Uyarıları -->
+{% if dusuk_stoklar %}
+<div class="alert alert-warning">
+    <h5 class="alert-heading">
+        <i class="fas fa-exclamation-triangle me-2"></i>Düşük Stok Uyarısı
+    </h5>
+    <p class="mb-2">Aşağıdaki malzemeler minimum stok seviyesinin altında:</p>
+    <ul class="mb-0">
+        {% for stok in dusuk_stoklar %}
+        <li>
+            <strong>{{ stok.malzeme_adi }}</strong> - 
+            Mevcut: {{ stok.miktar }} {{ stok.birim or 'adet' }}, 
+            Minimum: {{ stok.min_stok }} {{ stok.birim or 'adet' }}
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Stok Listesi -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Stok Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if stoklar %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Malzeme Adı</th>
+                        <th>Kategori</th>
+                        <th>Miktar</th>
+                        <th>Depo</th>
+                        <th>Min. Stok</th>
+                        <th>Maliyet</th>
+                        <th>Son Güncelleme</th>
+                        <th>Durum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stok in stoklar %}
+                    <tr>
+                        <td>
+                            <strong>{{ stok.malzeme_adi }}</strong>
+                            {% if stok.notlar %}
+                            <br><small class="text-muted">{{ stok.notlar }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if stok.kategori %}
+                            <span class="badge bg-secondary">{{ stok.kategori }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ stok.miktar }}</strong> {{ stok.birim or 'adet' }}
+                        </td>
+                        <td>{{ stok.depo or 'Genel Depo' }}</td>
+                        <td>{{ stok.min_stok }} {{ stok.birim or 'adet' }}</td>
+                        <td>₺{{ "%.2f"|format(stok.maliyet * stok.miktar) }}</td>
+                        <td>{{ stok.tarih }}</td>
+                        <td>
+                            {% if stok.min_stok > 0 and stok.miktar <= stok.min_stok %}
+                            <span class="badge bg-danger">Düşük Stok</span>
+                            {% elif stok.miktar == 0 %}
+                            <span class="badge bg-dark">Tükendi</span>
+                            {% else %}
+                            <span class="badge bg-success">Normal</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz stok kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk stok kaydınızı eklemek için "Stok İşlemi" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni Stok Modal -->
+<div class="modal fade" id="yeniStokModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-box me-2"></i>Stok İşlemi
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">İşlem Türü</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="islem_turu" id="ekle" value="ekle" checked>
+                            <label class="btn btn-outline-success" for="ekle">
+                                <i class="fas fa-plus me-1"></i>Stok Ekle
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="islem_turu" id="cikar" value="cikar">
+                            <label class="btn btn-outline-danger" for="cikar">
+                                <i class="fas fa-minus me-1"></i>Stok Çıkar
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Malzeme Adı *</label>
+                            <input type="text" name="malzeme_adi" class="form-control" required 
+                                   placeholder="Örn: Tohum, Gübre, Ilaç">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Kategori</label>
+                            <select name="kategori" class="form-select">
+                                <option value="">Kategori Seçin</option>
+                                <option value="Tohum">Tohum</option>
+                                <option value="Gübre">Gübre</option>
+                                <option value="İlaç">İlaç</option>
+                                <option value="Malzeme">Malzeme</option>
+                                <option value="Ambalaj">Ambalaj</option>
+                                <option value="Yakıt">Yakıt</option>
+                                <option value="Diğer">Diğer</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Miktar *</label>
+                            <input type="number" name="miktar" class="form-control" required step="0.1" min="0">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Birim</label>
+                            <select name="birim" class="form-select">
+                                <option value="adet">Adet</option>
+                                <option value="kg">Kilogram</option>
+                                <option value="lt">Litre</option>
+                                <option value="gr">Gram</option>
+                                <option value="mt">Metre</option>
+                                <option value="paket">Paket</option>
+                                <option value="kutu">Kutu</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Depo</label>
+                            <input type="text" name="depo" class="form-control" 
+                                   placeholder="Örn: Ana Depo, Soğuk Hava">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Minimum Stok Seviyesi</label>
+                            <input type="number" name="min_stok" class="form-control" step="0.1" min="0" 
+                                   placeholder="Uyarı için minimum miktar">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Birim Maliyet (₺)</label>
+                            <input type="number" name="maliyet" class="form-control" step="0.01" min="0" 
+                                   placeholder="Birim başına maliyet">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="2" 
+                                  placeholder="Ek bilgiler, tedarikçi bilgisi..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

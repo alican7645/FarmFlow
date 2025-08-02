@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}İşçilik Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-users me-2"></i>
+            İşçilik Yönetimi
+        </h1>
+        <p class="text-muted">İşçi çalışma saatleri ve ücret takibini buradan yapabilirsiniz.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#yeniIscilikModal">
+            <i class="fas fa-plus me-2"></i>Yeni İşçilik Kaydı
+        </button>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Bu Ay Toplam</h6>
+                        <h4 class="mb-0">₺{{ "%.2f"|format(bu_ay_toplam) }}</h4>
+                        <small class="text-muted">İşçilik maliyeti</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-lira-sign fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-info">Aktif İşçi</h6>
+                        <h4 class="mb-0">{{ isci_ozetleri|length }}</h4>
+                        <small class="text-muted">Bu ay çalışan</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-user-friends fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Toplam Saat</h6>
+                        <h4 class="mb-0">
+                            {{ "%.1f"|format(isci_ozetleri|sum(attribute='toplam_sure') or 0) }}
+                        </h4>
+                        <small class="text-muted">Bu ay toplam</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-clock fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- İşçi Özetleri -->
+{% if isci_ozetleri %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-bar me-2"></i>Bu Ay İşçi Performansı
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>İşçi Adı</th>
+                        <th>Görev Sayısı</th>
+                        <th>Toplam Saat</th>
+                        <th>Toplam Kazanç</th>
+                        <th>Ortalama Saatlik</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ozet in isci_ozetleri %}
+                    <tr>
+                        <td><strong>{{ ozet.isci_adi }}</strong></td>
+                        <td>{{ ozet.gorev_sayisi }}</td>
+                        <td>{{ "%.1f"|format(ozet.toplam_sure) }} saat</td>
+                        <td><strong>₺{{ "%.2f"|format(ozet.toplam_kazanc) }}</strong></td>
+                        <td>₺{{ "%.2f"|format(ozet.toplam_kazanc / ozet.toplam_sure if ozet.toplam_sure > 0 else 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- İşçilik Kayıtları -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>İşçilik Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if iscilikler %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>İşçi Adı</th>
+                        <th>Görev</th>
+                        <th>Tarih</th>
+                        <th>Süre</th>
+                        <th>Sera</th>
+                        <th>Saatlik Ücret</th>
+                        <th>Toplam Ücret</th>
+                        <th>Durum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for iscilik in iscilikler %}
+                    <tr>
+                        <td>
+                            <strong>{{ iscilik.isci_adi }}</strong>
+                            {% if iscilik.notlar %}
+                            <br><small class="text-muted">{{ iscilik.notlar }}</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ iscilik.gorev }}</td>
+                        <td>{{ iscilik.tarih }}</td>
+                        <td>
+                            {{ "%.1f"|format(iscilik.sure) }} saat
+                            {% if iscilik.baslangic_saati and iscilik.bitis_saati %}
+                            <br><small class="text-muted">
+                                {{ iscilik.baslangic_saati }} - {{ iscilik.bitis_saati }}
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>{{ iscilik.sera_adi or '-' }}</td>
+                        <td>₺{{ "%.2f"|format(iscilik.saatlik_ucret) }}</td>
+                        <td><strong>₺{{ "%.2f"|format(iscilik.toplam_ucret) }}</strong></td>
+                        <td>
+                            <span class="badge bg-{% if iscilik.durum == 'Tamamlandı' %}success{% else %}warning{% endif %}">
+                                {{ iscilik.durum }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz işçilik kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk işçilik kaydınızı eklemek için "Yeni İşçilik Kaydı" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni İşçilik Modal -->
+<div class="modal fade" id="yeniIscilikModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-plus me-2"></i>Yeni İşçilik Kaydı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">İşçi Adı *</label>
+                            <input type="text" name="isci_adi" class="form-control" required 
+                                   placeholder="Örn: Ahmet Yılmaz">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Görev *</label>
+                            <select name="gorev" class="form-select" required>
+                                <option value="">Görev Seçin</option>
+                                <option value="Ekim">Ekim</option>
+                                <option value="Sulama">Sulama</option>
+                                <option value="Gübreleme">Gübreleme</option>
+                                <option value="İlaçlama">İlaçlama</option>
+                                <option value="Budama">Budama</option>
+                                <option value="Hasat">Hasat</option>
+                                <option value="Temizlik">Temizlik</option>
+                                <option value="Bakım">Bakım</option>
+                                <option value="Ambalajlama">Ambalajlama</option>
+                                <option value="Diğer">Diğer</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tarih *</label>
+                            <input type="date" name="tarih" class="form-control" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Başlangıç Saati</label>
+                            <input type="time" name="baslangic_saati" class="form-control">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Bitiş Saati</label>
+                            <input type="time" name="bitis_saati" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Çalışma Süresi (saat)</label>
+                            <input type="number" name="sure" class="form-control" step="0.5" min="0" 
+                                   placeholder="Otomatik hesaplanır veya manuel girin">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Saatlik Ücret (₺)</label>
+                            <input type="number" name="saatlik_ucret" class="form-control" step="0.01" min="0" 
+                                   placeholder="Örn: 50.00">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Sera Adı</label>
+                            <input type="text" name="sera_adi" class="form-control" 
+                                   placeholder="Hangi serada çalıştı">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="2" 
+                                  placeholder="Yapılan işle ilgili detaylar..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>İpucu:</strong> Başlangıç ve bitiş saati girilirse çalışma süresi otomatik hesaplanır.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Saat hesaplayıcı
+document.addEventListener('DOMContentLoaded', function() {
+    const baslangicInput = document.querySelector('input[name="baslangic_saati"]');
+    const bitisInput = document.querySelector('input[name="bitis_saati"]');
+    const sureInput = document.querySelector('input[name="sure"]');
+    
+    function hesaplaSure() {
+        if (baslangicInput.value && bitisInput.value) {
+            const baslangic = new Date('2000-01-01 ' + baslangicInput.value);
+            const bitis = new Date('2000-01-01 ' + bitisInput.value);
+            
+            let fark = (bitis - baslangic) / (1000 * 60 * 60); // saat cinsinden
+            
+            if (fark < 0) {
+                fark += 24; // Gece vardiyası için
+            }
+            
+            sureInput.value = fark.toFixed(1);
+        }
+    }
+    
+    baslangicInput.addEventListener('change', hesaplaSure);
+    bitisInput.addEventListener('change', hesaplaSure);
+});
+</script>
+{% endblock %}
