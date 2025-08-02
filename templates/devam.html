@@ -12,9 +12,31 @@
         <p class="text-muted">Personelin günlük devam durumunu takip edebilirsiniz.</p>
     </div>
     <div class="col-md-4 text-end">
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#devamKayitModal">
-            <i class="fas fa-calendar-plus me-2"></i>Devam Kaydet
-        </button>
+        <div class="btn-group" role="group">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#devamKayitModal">
+                <i class="fas fa-calendar-plus me-2"></i>Devam Kaydet
+            </button>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fas fa-file-excel me-2"></i>Excel Çıktısı
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{{ url_for('devam_excel_export') }}">
+                        <i class="fas fa-download me-2"></i>Son 30 Gün
+                    </a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('devam_excel_export', baslangic=(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'), bitis=datetime.now().strftime('%Y-%m-%d')) }}">
+                        <i class="fas fa-download me-2"></i>Son 7 Gün
+                    </a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('devam_excel_export', baslangic=(datetime.now().replace(day=1)).strftime('%Y-%m-%d'), bitis=datetime.now().strftime('%Y-%m-%d')) }}">
+                        <i class="fas fa-download me-2"></i>Bu Ay
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#excelExportModal">
+                        <i class="fas fa-calendar-alt me-2"></i>Özel Tarih Aralığı
+                    </a></li>
+                </ul>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -246,9 +268,81 @@
                             <i class="fas fa-chart-bar me-2"></i>Personel Raporu
                         </a>
                     </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('devam_excel_export') }}" class="btn btn-outline-success w-100">
+                            <i class="fas fa-file-excel me-2"></i>Excel İndir
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Excel Export Modal -->
+<div class="modal fade" id="excelExportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-excel me-2"></i>Özel Tarih Aralığı için Excel Çıktısı
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="excelExportForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Başlangıç Tarihi *</label>
+                            <input type="date" id="exportBaslangic" class="form-control" required 
+                                   value="{{ (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d') }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Bitiş Tarihi *</label>
+                            <input type="date" id="exportBitis" class="form-control" required 
+                                   value="{{ datetime.now().strftime('%Y-%m-%d') }}">
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Seçilen tarih aralığındaki tüm devam kayıtları ve personel istatistikleri Excel dosyasına aktarılacaktır.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-success" onclick="exportCustomRange()">
+                    <i class="fas fa-download me-2"></i>Excel Dosyasını İndir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportCustomRange() {
+    const baslangic = document.getElementById('exportBaslangic').value;
+    const bitis = document.getElementById('exportBitis').value;
+    
+    if (!baslangic || !bitis) {
+        alert('Lütfen başlangıç ve bitiş tarihlerini seçin.');
+        return;
+    }
+    
+    if (baslangic > bitis) {
+        alert('Başlangıç tarihi bitiş tarihinden önce olmalıdır.');
+        return;
+    }
+    
+    const url = `{{ url_for('devam_excel_export') }}?baslangic=${baslangic}&bitis=${bitis}`;
+    window.open(url, '_blank');
+    
+    // Modal'i kapat
+    const modal = bootstrap.Modal.getInstance(document.getElementById('excelExportModal'));
+    modal.hide();
+}
+</script>
 {% endblock %}

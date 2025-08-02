@@ -1,8 +1,11 @@
 import os
 import sqlite3
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash
-from datetime import datetime, date
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response, send_file
+from datetime import datetime, date, timedelta
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -488,6 +491,119 @@ def devam():
                          bugun_devam=bugun_devam,
                          devam_istatistik=devam_istatistik,
                          bugun=bugun)
+
+@app.route("/devam/excel-export")
+def devam_excel_export():
+    conn = get_db_connection()
+    
+    # Tarih aralığı parametreleri
+    baslangic_tarihi = request.args.get('baslangic', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
+    bitis_tarihi = request.args.get('bitis', datetime.now().strftime('%Y-%m-%d'))
+    
+    # Devam kayıtlarını al
+    devam_kayitlari = conn.execute("""
+        SELECT d.tarih, p.personel_adi, p.pozisyon, d.durum, d.giris_saati, d.cikis_saati, d.notlar
+        FROM devam d
+        LEFT JOIN personel p ON d.personel_id = p.id
+        WHERE d.tarih BETWEEN ? AND ?
+        ORDER BY d.tarih DESC, p.personel_adi
+    """, (baslangic_tarihi, bitis_tarihi)).fetchall()
+    
+    # Personel bazında özet istatistikler
+    personel_ozet = conn.execute("""
+        SELECT p.personel_adi, p.pozisyon,
+               COUNT(*) as toplam_gun,
+               SUM(CASE WHEN d.durum = 'Geldi' THEN 1 ELSE 0 END) as gelme_sayisi,
+               SUM(CASE WHEN d.durum = 'Gelmedi' THEN 1 ELSE 0 END) as gelmeme_sayisi,
+               SUM(CASE WHEN d.durum = 'İzinli' THEN 1 ELSE 0 END) as izin_sayisi,
+               SUM(CASE WHEN d.durum = 'Rapor' THEN 1 ELSE 0 END) as rapor_sayisi
+        FROM devam d
+        LEFT JOIN personel p ON d.personel_id = p.id
+        WHERE d.tarih BETWEEN ? AND ?
+        GROUP BY p.personel_adi, p.pozisyon
+        ORDER BY p.personel_adi
+    """, (baslangic_tarihi, bitis_tarihi)).fetchall()
+    
+    conn.close()
+    
+    # Excel dosyası oluştur
+    wb = Workbook()
+    
+    # İlk sayfa: Günlük devam kayıtları
+    ws1 = wb.active
+    ws1.title = "Günlük Devam Kayıtları"
+    
+    # Başlık stilleri
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    center_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Başlıklar
+    headers1 = ["Tarih", "Personel Adı", "Pozisyon", "Durum", "Giriş Saati", "Çıkış Saati", "Notlar"]
+    for col, header in enumerate(headers1, 1):
+        cell = ws1.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_alignment
+    
+    # Veri satırları
+    for row, devam in enumerate(devam_kayitlari, 2):
+        ws1.cell(row=row, column=1, value=devam['tarih'])
+        ws1.cell(row=row, column=2, value=devam['personel_adi'])
+        ws1.cell(row=row, column=3, value=devam['pozisyon'] or '-')
+        ws1.cell(row=row, column=4, value=devam['durum'])
+        ws1.cell(row=row, column=5, value=devam['giris_saati'] or '-')
+        ws1.cell(row=row, column=6, value=devam['cikis_saati'] or '-')
+        ws1.cell(row=row, column=7, value=devam['notlar'] or '-')
+    
+    # Sütun genişliklerini ayarla
+    column_widths1 = [12, 20, 15, 12, 12, 12, 30]
+    for col, width in enumerate(column_widths1, 1):
+        ws1.column_dimensions[chr(64 + col)].width = width
+    
+    # İkinci sayfa: Personel özet istatistikleri
+    ws2 = wb.create_sheet(title="Personel Özet İstatistikleri")
+    
+    # Başlıklar
+    headers2 = ["Personel Adı", "Pozisyon", "Toplam Gün", "Gelme", "Gelmeme", "İzin", "Rapor", "Devam Oranı (%)"]
+    for col, header in enumerate(headers2, 1):
+        cell = ws2.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_alignment
+    
+    # Veri satırları
+    for row, ozet in enumerate(personel_ozet, 2):
+        devam_orani = (ozet['gelme_sayisi'] / ozet['toplam_gun'] * 100) if ozet['toplam_gun'] > 0 else 0
+        
+        ws2.cell(row=row, column=1, value=ozet['personel_adi'])
+        ws2.cell(row=row, column=2, value=ozet['pozisyon'] or '-')
+        ws2.cell(row=row, column=3, value=ozet['toplam_gun'])
+        ws2.cell(row=row, column=4, value=ozet['gelme_sayisi'])
+        ws2.cell(row=row, column=5, value=ozet['gelmeme_sayisi'])
+        ws2.cell(row=row, column=6, value=ozet['izin_sayisi'])
+        ws2.cell(row=row, column=7, value=ozet['rapor_sayisi'])
+        ws2.cell(row=row, column=8, value=f"{devam_orani:.1f}%")
+    
+    # Sütun genişliklerini ayarla
+    column_widths2 = [20, 15, 12, 8, 10, 8, 8, 15]
+    for col, width in enumerate(column_widths2, 1):
+        ws2.column_dimensions[chr(64 + col)].width = width
+    
+    # Excel dosyasını belleğe kaydet
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # Dosya adı
+    filename = f"devam_raporu_{baslangic_tarihi}_{bitis_tarihi}.xlsx"
+    
+    # Response oluştur
+    response = make_response(output.getvalue())
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    
+    return response
 
 @app.route("/hasat", methods=["GET", "POST"])
 def hasat():
