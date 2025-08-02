@@ -84,6 +84,26 @@
     </div>
 </div>
 
+<!-- Hasat Özet Kartı -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-warning">Bu Ay Hasat</h6>
+                        <h3 class="mb-0">{{ "%.0f"|format(stats.bu_ay_hasat) }} kg</h3>
+                        <small class="text-muted">Toplam hasat</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-cut fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Son Aktiviteler -->
 <div class="row">
     <!-- Son Üretim Kayıtları -->
@@ -225,6 +245,11 @@
                         </a>
                     </div>
                     <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('hasat') }}" class="btn btn-outline-warning w-100">
+                            <i class="fas fa-cut me-2"></i>Hasat Kaydet
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
                         <a href="{{ url_for('stok') }}" class="btn btn-outline-info w-100">
                             <i class="fas fa-box me-2"></i>Stok Ekle
                         </a>
@@ -234,7 +259,9 @@
                             <i class="fas fa-user-plus me-2"></i>İşçilik Kaydet
                         </a>
                     </div>
-                    <div class="col-md-3 mb-2">
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
                         <a href="{{ url_for('rapor') }}" class="btn btn-outline-secondary w-100">
                             <i class="fas fa-chart-line me-2"></i>Rapor Görüntüle
                         </a>

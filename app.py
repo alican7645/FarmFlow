@@ -60,6 +60,20 @@ def init_db():
         notlar TEXT
     )''')
 
+    # Hasat Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS hasat (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uretim_id INTEGER,
+        hasat_tarihi TEXT NOT NULL,
+        parsil_alan TEXT NOT NULL,
+        hasat_miktari REAL NOT NULL,
+        hasat_eden TEXT NOT NULL,
+        teslim_edilen TEXT,
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (uretim_id) REFERENCES uretim (id)
+    )''')
+
     conn.commit()
     conn.close()
 
@@ -97,13 +111,20 @@ def get_dashboard_stats():
         "SELECT COUNT(DISTINCT sera_adi) as count FROM uretim"
     ).fetchone()['count']
     
+    # Bu ayki toplam hasat
+    bu_ay_hasat = conn.execute(
+        "SELECT COALESCE(SUM(hasat_miktari), 0) as total FROM hasat WHERE hasat_tarihi LIKE ?",
+        (f"{bu_ay}%",)
+    ).fetchone()['total']
+    
     conn.close()
     
     return {
         'aktif_uretim': aktif_uretim,
         'dusuk_stok': dusuk_stok,
         'aylik_iscilik': aylik_iscilik,
-        'sera_sayisi': sera_sayisi
+        'sera_sayisi': sera_sayisi,
+        'bu_ay_hasat': bu_ay_hasat
     }
 
 # --- ROTALAR ---
@@ -356,6 +377,78 @@ def iscilik():
                          iscilikler=iscilikler,
                          bu_ay_toplam=bu_ay_toplam,
                          isci_ozetleri=isci_ozetleri)
+
+@app.route("/hasat", methods=["GET", "POST"])
+def hasat():
+    conn = get_db_connection()
+    
+    if request.method == "POST":
+        try:
+            uretim_id = request.form.get('uretim_id')
+            hasat_tarihi = request.form['hasat_tarihi']
+            parsil_alan = request.form['parsil_alan'].strip()
+            hasat_miktari = float(request.form['hasat_miktari'])
+            hasat_eden = request.form['hasat_eden'].strip()
+            teslim_edilen = request.form.get('teslim_edilen', '').strip()
+            notlar = request.form.get('notlar', '').strip()
+            
+            if not parsil_alan or not hasat_eden or not hasat_tarihi:
+                flash('Hasat tarihi, parsel/alan ve hasat eden kişi zorunludur!', 'error')
+            else:
+                conn.execute("""
+                    INSERT INTO hasat (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
+                                     hasat_eden, teslim_edilen, notlar) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
+                      hasat_eden, teslim_edilen, notlar))
+                conn.commit()
+                flash('Hasat kaydı başarıyla eklendi!', 'success')
+                return redirect(url_for('hasat'))
+                
+        except ValueError:
+            flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
+        except Exception as e:
+            flash(f'Bir hata oluştu: {str(e)}', 'error')
+    
+    # Hasat kayıtları ve ilgili üretim bilgileri
+    hasatlar = conn.execute("""
+        SELECT h.*, u.sera_adi, u.urun_adi, u.ekim_tarihi
+        FROM hasat h
+        LEFT JOIN uretim u ON h.uretim_id = u.id
+        ORDER BY h.hasat_tarihi DESC
+    """).fetchall()
+    
+    # Aktif üretimler (hasat için)
+    aktif_uretimler = conn.execute(
+        "SELECT * FROM uretim WHERE durum != 'Hasat Edildi' ORDER BY sera_adi, urun_adi"
+    ).fetchall()
+    
+    # Bu ayki hasat istatistikleri
+    bu_ay = datetime.now().strftime('%Y-%m')
+    bu_ay_toplam = conn.execute(
+        "SELECT COALESCE(SUM(hasat_miktari), 0) as total FROM hasat WHERE hasat_tarihi LIKE ?",
+        (f"{bu_ay}%",)
+    ).fetchone()['total']
+    
+    # En çok hasat yapan kişiler
+    hasat_eden_istatistik = conn.execute("""
+        SELECT hasat_eden,
+               COUNT(*) as hasat_sayisi,
+               SUM(hasat_miktari) as toplam_miktar
+        FROM hasat 
+        WHERE hasat_tarihi LIKE ?
+        GROUP BY hasat_eden
+        ORDER BY toplam_miktar DESC
+        LIMIT 5
+    """, (f"{bu_ay}%",)).fetchall()
+    
+    conn.close()
+    
+    return render_template("hasat.html", 
+                         hasatlar=hasatlar,
+                         aktif_uretimler=aktif_uretimler,
+                         bu_ay_toplam=bu_ay_toplam,
+                         hasat_eden_istatistik=hasat_eden_istatistik)
 
 @app.route("/rapor")
 def rapor():

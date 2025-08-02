@@ -24,17 +24,19 @@ Preferred communication style: Simple, everyday language.
 
 ## Data Storage Solutions
 - **Primary Database**: SQLite3 file-based database (sera.db)
-- **Database Schema**: Three main tables:
+- **Database Schema**: Four main tables:
   - `uretim` (production): Tracks greenhouse plantings, harvests, and yields
+  - `hasat` (harvest): Records detailed harvest operations with plot/field, quantities, personnel, and delivery information
   - `stok` (inventory): Manages material stock levels with minimum thresholds
   - `iscilik` (labor): Records worker hours, tasks, and wages
 - **Data Persistence**: File-based storage suitable for small to medium operations
 
 ## Core Features
 - **Production Management**: Track planting dates, harvest schedules, greenhouse assignments, and yield calculations
+- **Harvest Management**: Record detailed harvest operations including dates, plot/field locations, quantities, responsible personnel, and delivery destinations
 - **Inventory Control**: Monitor stock levels with low-stock alerts and material categorization
 - **Labor Tracking**: Record worker hours, calculate wages, and track task assignments
-- **Dashboard Analytics**: Summary statistics and operational overview
+- **Dashboard Analytics**: Summary statistics and operational overview including harvest metrics
 - **Reporting System**: Monthly production reports with success rates and yield analysis
 
 ## Authentication and Authorization

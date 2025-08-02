@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Hasat Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-cut me-2"></i>
+            Hasat Yönetimi
+        </h1>
+        <p class="text-muted">Hasat işlemlerinizi ve teslim bilgilerini buradan takip edebilirsiniz.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#yeniHasatModal">
+            <i class="fas fa-plus me-2"></i>Yeni Hasat Kaydı
+        </button>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Bu Ay Toplam</h6>
+                        <h4 class="mb-0">{{ "%.0f"|format(bu_ay_toplam) }} kg</h4>
+                        <small class="text-muted">Hasat miktarı</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-weight fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-info">Toplam Hasat</h6>
+                        <h4 class="mb-0">{{ hasatlar|length }}</h4>
+                        <small class="text-muted">Kayıt sayısı</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-clipboard-list fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Aktif Çalışan</h6>
+                        <h4 class="mb-0">{{ hasat_eden_istatistik|length }}</h4>
+                        <small class="text-muted">Bu ay hasat yapan</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-user-friends fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hasat Eden İstatistikleri -->
+{% if hasat_eden_istatistik %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-bar me-2"></i>Bu Ay Hasat Performansı
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Hasat Eden</th>
+                        <th>Hasat Sayısı</th>
+                        <th>Toplam Miktar (kg)</th>
+                        <th>Ortalama (kg/hasat)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for istatistik in hasat_eden_istatistik %}
+                    <tr>
+                        <td><strong>{{ istatistik.hasat_eden }}</strong></td>
+                        <td>{{ istatistik.hasat_sayisi }}</td>
+                        <td>{{ "%.1f"|format(istatistik.toplam_miktar) }} kg</td>
+                        <td>{{ "%.1f"|format(istatistik.toplam_miktar / istatistik.hasat_sayisi if istatistik.hasat_sayisi > 0 else 0) }} kg</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Hasat Kayıtları -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Hasat Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if hasatlar %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Hasat Tarihi</th>
+                        <th>Üretim</th>
+                        <th>Parsel/Alan</th>
+                        <th>Miktar (kg)</th>
+                        <th>Hasat Eden</th>
+                        <th>Teslim Edilen</th>
+                        <th>Notlar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for hasat in hasatlar %}
+                    <tr>
+                        <td>
+                            <strong>{{ hasat.hasat_tarihi }}</strong>
+                        </td>
+                        <td>
+                            {% if hasat.sera_adi and hasat.urun_adi %}
+                            <strong>{{ hasat.sera_adi }}</strong>
+                            <br><small class="text-muted">{{ hasat.urun_adi }}</small>
+                            {% else %}
+                            <span class="text-muted">Bağımsız Hasat</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ hasat.parsil_alan }}</td>
+                        <td>
+                            <strong>{{ "%.1f"|format(hasat.hasat_miktari) }} kg</strong>
+                        </td>
+                        <td>{{ hasat.hasat_eden }}</td>
+                        <td>
+                            {% if hasat.teslim_edilen %}
+                            <span class="badge bg-success">{{ hasat.teslim_edilen }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Teslim Edilmedi</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if hasat.notlar %}
+                            <small class="text-muted">{{ hasat.notlar }}</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-cut fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz hasat kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk hasat kaydınızı eklemek için "Yeni Hasat Kaydı" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni Hasat Modal -->
+<div class="modal fade" id="yeniHasatModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Yeni Hasat Kaydı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hasat Tarihi *</label>
+                            <input type="date" name="hasat_tarihi" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Parsel/Alan *</label>
+                            <input type="text" name="parsil_alan" class="form-control" required 
+                                   placeholder="Örn: A Blok, 1 Nolu Sera, Kuzey Parsel">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hasat Miktarı (kg) *</label>
+                            <input type="number" name="hasat_miktari" class="form-control" required 
+                                   step="0.1" min="0" placeholder="Örn: 150.5">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hasat Eden *</label>
+                            <input type="text" name="hasat_eden" class="form-control" required 
+                                   placeholder="Örn: Mehmet Yılmaz">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Teslim Edilen</label>
+                            <input type="text" name="teslim_edilen" class="form-control" 
+                                   placeholder="Örn: ABC Gıda Ltd., Yerel Pazar">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Bağlı Üretim (Opsiyonel)</label>
+                            <select name="uretim_id" class="form-select">
+                                <option value="">Üretim seçin (opsiyonel)</option>
+                                {% for uretim in aktif_uretimler %}
+                                <option value="{{ uretim.id }}">
+                                    {{ uretim.sera_adi }} - {{ uretim.urun_adi }} ({{ uretim.ekim_tarihi }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="3" 
+                                  placeholder="Kalite bilgisi, özel durumlar, ambalaj bilgisi..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>İpucu:</strong> Bağlı üretim seçerek hasat kaydını belirli bir ekim ile ilişkilendirebilirsiniz.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
