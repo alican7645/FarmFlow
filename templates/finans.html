@@ -12,6 +12,11 @@
         <p class="text-muted">Finansal durum özeti, fatura yönetimi ve kar/zarar analizi.</p>
     </div>
     <div class="col-md-4 text-end">
+        {% if integration_msg %}
+        <div class="alert alert-success alert-sm mb-2">
+            <small><i class="fas fa-sync me-1"></i>{{ integration_msg }}</small>
+        </div>
+        {% endif %}
         <div class="btn-group" role="group">
             <a href="{{ url_for('finans_faturalar') }}" class="btn btn-primary">
                 <i class="fas fa-file-invoice me-2"></i>Faturalar

@@ -387,6 +387,101 @@ def batch_deduct_stock(conn, deductions):
                 return False, results  # Stop on first failure
     return True, results
 
+def auto_record_stock_cost(conn, kategori, miktar, operation_description, sera_adi="", uretim_id=None):
+    """
+    Automatically record cost when stock items are used
+    Returns True if successful, False otherwise
+    """
+    try:
+        # Find the item used from stock to get cost information
+        item = conn.execute("""
+            SELECT id, malzeme_adi, maliyet, birim 
+            FROM stok 
+            WHERE kategori = ? AND miktar >= ? 
+            ORDER BY tarih ASC 
+            LIMIT 1
+        """, (kategori, miktar)).fetchone()
+        
+        if item and item['maliyet'] > 0:
+            # Calculate total cost
+            toplam_tutar = miktar * item['maliyet']
+            
+            # Map category to cost type
+            maliyet_turu = {
+                'Gübre': 'Gübre',
+                'Pestisit': 'İlaç',
+                'Kimyasal': 'İlaç', 
+                'Kutu': 'Kutu',
+                'Palet': 'Palet'
+            }.get(kategori, 'Diğer')
+            
+            # Record cost automatically
+            audit_fields = add_audit_fields_for_create()
+            conn.execute("""
+                INSERT INTO maliyetler (maliyet_turu, tarih, aciklama, miktar, birim, 
+                                      birim_fiyat, toplam_tutar, sera_adi, uretim_id, 
+                                      tedarikci, notlar, created_by, modified_by, modified_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Otomatik Stok Kullanımı', ?, ?, ?, ?)
+            """, (maliyet_turu, datetime.now().strftime('%Y-%m-%d'), 
+                  f"Otomatik: {operation_description}", miktar, item['birim'],
+                  item['maliyet'], toplam_tutar, sera_adi, uretim_id,
+                  f"Stok kullanımı - {item['malzeme_adi']}",
+                  audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+            
+            return True, f"Maliyet kaydedildi: {toplam_tutar:.2f} TL"
+        
+        return True, "Maliyet bilgisi yok, sadece stok düşüldü"
+        
+    except Exception as e:
+        return False, f"Maliyet kayıt hatası: {str(e)}"
+
+def ensure_monthly_personnel_costs(conn, target_month=None):
+    """
+    Automatically ensure monthly personnel costs are recorded
+    """
+    if not target_month:
+        target_month = datetime.now().strftime('%Y-%m')
+    
+    try:
+        # Check if personnel costs already recorded for this month
+        existing = conn.execute("""
+            SELECT COUNT(*) as count FROM maliyetler 
+            WHERE maliyet_turu = 'İşçilik' 
+            AND aciklama LIKE 'Otomatik Aylık Maaş%'
+            AND tarih LIKE ?
+        """, (f"{target_month}%",)).fetchone()
+        
+        if existing['count'] == 0:
+            # Get active personnel with salaries
+            personeller = conn.execute("""
+                SELECT personel_adi, aylik_maas 
+                FROM personel 
+                WHERE aktif = 1 AND aylik_maas > 0
+            """).fetchall()
+            
+            # Record monthly salary costs
+            audit_fields = add_audit_fields_for_create()
+            for personel in personeller:
+                conn.execute("""
+                    INSERT INTO maliyetler (maliyet_turu, tarih, aciklama, miktar, birim, 
+                                          birim_fiyat, toplam_tutar, tedarikci, notlar,
+                                          created_by, modified_by, modified_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ('İşçilik', f"{target_month}-01", 
+                      f"Otomatik Aylık Maaş - {personel['personel_adi']}", 
+                      1, 'ay', personel['aylik_maas'], personel['aylik_maas'],
+                      'Otomatik Personel Sistemi', 
+                      f"Aylık maaş ödemesi - {target_month}",
+                      audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+            
+            conn.commit()
+            return len(personeller), "Aylık personel maliyetleri kaydedildi"
+        
+        return 0, "Bu ay personel maliyetleri zaten kaydedilmiş"
+        
+    except Exception as e:
+        return 0, f"Personel maliyet hatası: {str(e)}"
+
 # Initialize databases on startup
 init_db()
 
@@ -1141,11 +1236,29 @@ def hasat():
                     
                     conn.commit()
                     
+                    # Automatically record packaging costs when boxes/pallets are used
+                    cost_messages = []
+                    if kutu_sayisi > 0:
+                        cost_success, cost_message = auto_record_stock_cost(
+                            conn, 'Kutu', kutu_sayisi, 
+                            f'Hasat Ambalajı - {parsil_alan}', parsil_alan)
+                        if cost_success:
+                            cost_messages.append(cost_message)
+                    
+                    if palet_sayisi > 0:
+                        cost_success, cost_message = auto_record_stock_cost(
+                            conn, 'Palet', palet_sayisi, 
+                            f'Hasat Ambalajı - {parsil_alan}', parsil_alan)
+                        if cost_success:
+                            cost_messages.append(cost_message)
+                    
                     success_msg = 'Hasat kaydı başarıyla eklendi!'
                     if teslim_edilen:
                         success_msg += f' Finans modülünde "{teslim_edilen}" için fatura kaydı oluşturuldu.'
                     if stock_messages:
                         success_msg += ' Stok güncellemeleri: ' + ', '.join(stock_messages)
+                    if cost_messages:
+                        success_msg += ' Ambalaj maliyetleri: ' + ', '.join(cost_messages)
                     flash(success_msg, 'success')
                     return redirect(url_for('hasat'))
                 else:
@@ -1316,6 +1429,7 @@ def sulama():
                     stock_messages = [result[1] for result in stock_results if result[0]]
                 
                 if stock_success:
+                    # Record irrigation
                     audit_fields = add_audit_fields_for_create()
                     conn.execute("""
                         INSERT INTO sulama (tarih, saat, sera_adi, sulama_turu, miktar, gubre_kimyasal, 
@@ -1324,11 +1438,35 @@ def sulama():
                     """, (tarih, saat, sera_adi, sulama_turu, miktar, gubre_kimyasal, gubre_miktari, 
                           personel, notlar, audit_fields['created_by'], audit_fields['modified_by'], 
                           audit_fields['modified_at']))
+                    
+                    # Automatically record costs for materials used
+                    cost_messages = []
+                    if gubre_miktari > 0 and gubre_kimyasal:
+                        if sulama_turu == 'Gübreli':
+                            cost_success, cost_message = auto_record_stock_cost(
+                                conn, 'Gübre', gubre_miktari, 
+                                f'Sulama - {sera_adi} - {gubre_kimyasal}', sera_adi)
+                            if cost_success:
+                                cost_messages.append(cost_message)
+                        elif sulama_turu == 'İlaçlı':
+                            cost_success1, cost_message1 = auto_record_stock_cost(
+                                conn, 'Pestisit', gubre_miktari, 
+                                f'Sulama - {sera_adi} - {gubre_kimyasal}', sera_adi)
+                            cost_success2, cost_message2 = auto_record_stock_cost(
+                                conn, 'Kimyasal', gubre_miktari, 
+                                f'Sulama - {sera_adi} - {gubre_kimyasal}', sera_adi)
+                            if cost_success1:
+                                cost_messages.append(cost_message1)
+                            if cost_success2:
+                                cost_messages.append(cost_message2)
+                    
                     conn.commit()
                     
                     success_msg = 'Sulama kaydı başarıyla eklendi!'
                     if stock_messages:
                         success_msg += ' Stok güncellemeleri: ' + ', '.join(stock_messages)
+                    if cost_messages:
+                        success_msg += ' Maliyet kayıtları: ' + ', '.join(cost_messages)
                     flash(success_msg, 'success')
                     return redirect(url_for('sulama'))
                 else:
@@ -1432,17 +1570,26 @@ def gubreleme():
                 stock_success, stock_results = batch_deduct_stock(conn, deductions)
                 
                 if stock_success:
+                    # Record fertilization
                     audit_fields = add_audit_fields_for_create()
-                    conn.execute("""
+                    gubreleme_id = conn.execute("""
                         INSERT INTO gubreleme (tarih, sera_adi, gubre_adi, gubre_miktari, uygulama_sekli, 
                                              personel, notlar, created_by, modified_by, modified_at) 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (tarih, sera_adi, gubre_adi, gubre_miktari, uygulama_sekli, personel, 
                           notlar, audit_fields['created_by'], audit_fields['modified_by'], 
-                          audit_fields['modified_at']))
+                          audit_fields['modified_at'])).lastrowid
+                    
+                    # Automatically record cost
+                    cost_success, cost_message = auto_record_stock_cost(
+                        conn, 'Gübre', gubre_miktari, 
+                        f'Gübreleme - {sera_adi} - {gubre_adi}', sera_adi)
+                    
                     conn.commit()
                     
                     success_msg = f'Gübreleme kaydı başarıyla eklendi! {stock_results[0][1]}'
+                    if cost_success:
+                        success_msg += f' {cost_message}'
                     flash(success_msg, 'success')
                     return redirect(url_for('gubreleme'))
                 else:
@@ -1624,6 +1771,10 @@ def rapor():
 def finans():
     conn = get_db_connection()
     
+    # Ensure monthly personnel costs are recorded
+    bu_ay = datetime.now().strftime('%Y-%m')
+    personnel_count, personnel_msg = ensure_monthly_personnel_costs(conn, bu_ay)
+    
     # İstatistikler
     stats = {}
     
@@ -1633,13 +1784,12 @@ def finans():
     """).fetchone()[0]
     
     # Bu ay toplam gelir (fiyatlandırılmış faturalar)
-    bu_ay = datetime.now().strftime('%Y-%m')
     stats['bu_ay_gelir'] = conn.execute("""
         SELECT COALESCE(SUM(toplam_tutar), 0) FROM faturalar 
         WHERE hasat_tarihi LIKE ? AND birim_fiyat IS NOT NULL
     """, (f"{bu_ay}%",)).fetchone()[0]
     
-    # Bu ay toplam gider
+    # Bu ay toplam gider (including all automatic costs)
     stats['bu_ay_gider'] = conn.execute("""
         SELECT COALESCE(SUM(toplam_tutar), 0) FROM maliyetler 
         WHERE tarih LIKE ?
@@ -1703,8 +1853,11 @@ def finans_faturalar():
                     """, (birim_fiyat, toplam_tutar, datetime.now().strftime('%Y-%m-%d'),
                           notlar, audit_fields['modified_by'], audit_fields['modified_at'], fatura_id))
                     
+                    # Automatically create revenue record when invoice is priced
+                    # (Revenue is now automatically calculated from faturalar table in reports)
+                    
                     conn.commit()
-                    flash(f'Fatura fiyatlandırıldı: {birim_fiyat} TL/kg', 'success')
+                    flash(f'Fatura fiyatlandırıldı: {birim_fiyat} TL/kg - Gelir otomatik entegre edildi!', 'success')
                 else:
                     flash('Fatura bulunamadı!', 'error')
                     
