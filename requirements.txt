@@ -4,3 +4,4 @@ Werkzeug
 openpyxl
 psycopg2-binary
 SQLAlchemy
+gunicorn
