@@ -144,6 +144,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS sulama (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tarih TEXT NOT NULL,
+        saat TEXT, -- Sulama saati (HH:MM format)
         sera_adi TEXT NOT NULL,
         sulama_turu TEXT NOT NULL, -- 'Normal', 'Gübreli', 'İlaçlı'
         miktar REAL NOT NULL, -- Litre
@@ -156,6 +157,13 @@ def init_db():
         modified_by TEXT,
         modified_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
+    
+    # Add hour field to existing tables if it doesn't exist
+    try:
+        c.execute("ALTER TABLE sulama ADD COLUMN saat TEXT")
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
 
     # Gübreleme Tablosu
     c.execute('''CREATE TABLE IF NOT EXISTS gubreleme (
@@ -1108,14 +1116,95 @@ def sulama():
     
     if request.method == "POST":
         try:
-            tarih = request.form['tarih']
-            sera_adi = request.form['sera_adi'].strip()
-            sulama_turu = request.form['sulama_turu']
-            miktar = float(request.form['miktar'])
-            gubre_kimyasal = request.form.get('gubre_kimyasal', '').strip()
-            gubre_miktari = float(request.form.get('gubre_miktari', 0) or 0)
-            personel = request.form['personel'].strip()
-            notlar = request.form.get('notlar', '').strip()
+            # Check if this is a bulk entry
+            bulk_entry = request.form.get('bulk_entry', False)
+            
+            if bulk_entry:
+                # Handle bulk entry
+                tarih = request.form['bulk_tarih']
+                sera_adi = request.form['bulk_sera_adi'].strip()
+                personel = request.form['bulk_personel'].strip()
+                
+                # Process multiple irrigation entries
+                entries_processed = 0
+                total_deductions = []
+                
+                # Get all form fields for bulk entries
+                i = 1
+                while f'saat_{i}' in request.form:
+                    saat = request.form.get(f'saat_{i}', '').strip()
+                    sulama_turu = request.form.get(f'sulama_turu_{i}')
+                    miktar = float(request.form.get(f'miktar_{i}', 0) or 0)
+                    gubre_kimyasal = request.form.get(f'gubre_kimyasal_{i}', '').strip()
+                    gubre_miktari = float(request.form.get(f'gubre_miktari_{i}', 0) or 0)
+                    notlar = request.form.get(f'notlar_{i}', '').strip()
+                    
+                    if saat and sulama_turu and miktar > 0:
+                        # Prepare stock deductions for this entry
+                        if gubre_miktari > 0 and gubre_kimyasal:
+                            if sulama_turu == 'Gübreli':
+                                total_deductions.append(('Gübre', gubre_miktari, f'Sulama kullanımı - {tarih} {saat} - {sera_adi}'))
+                            elif sulama_turu == 'İlaçlı':
+                                total_deductions.append(('Pestisit', gubre_miktari, f'Sulama kullanımı - {tarih} {saat} - {sera_adi}'))
+                                total_deductions.append(('Kimyasal', gubre_miktari, f'Sulama kullanımı - {tarih} {saat} - {sera_adi}'))
+                        
+                        entries_processed += 1
+                    i += 1
+                
+                if entries_processed == 0:
+                    flash('En az bir geçerli sulama kaydı girmelisiniz!', 'error')
+                else:
+                    # Process all stock deductions at once
+                    stock_success = True
+                    stock_messages = []
+                    
+                    if total_deductions:
+                        stock_success, stock_results = batch_deduct_stock(conn, total_deductions)
+                        stock_messages = [result[1] for result in stock_results if result[0]]
+                    
+                    if stock_success:
+                        # Insert all entries
+                        audit_fields = add_audit_fields_for_create()
+                        i = 1
+                        while f'saat_{i}' in request.form:
+                            saat = request.form.get(f'saat_{i}', '').strip()
+                            sulama_turu = request.form.get(f'sulama_turu_{i}')
+                            miktar = float(request.form.get(f'miktar_{i}', 0) or 0)
+                            gubre_kimyasal = request.form.get(f'gubre_kimyasal_{i}', '').strip()
+                            gubre_miktari = float(request.form.get(f'gubre_miktari_{i}', 0) or 0)
+                            notlar = request.form.get(f'notlar_{i}', '').strip()
+                            
+                            if saat and sulama_turu and miktar > 0:
+                                conn.execute("""
+                                    INSERT INTO sulama (tarih, saat, sera_adi, sulama_turu, miktar, gubre_kimyasal, 
+                                                      gubre_miktari, personel, notlar, created_by, modified_by, modified_at) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """, (tarih, saat, sera_adi, sulama_turu, miktar, gubre_kimyasal, gubre_miktari, 
+                                      personel, notlar, audit_fields['created_by'], audit_fields['modified_by'], 
+                                      audit_fields['modified_at']))
+                            i += 1
+                        
+                        conn.commit()
+                        success_msg = f'{entries_processed} sulama kaydı başarıyla eklendi!'
+                        if stock_messages:
+                            success_msg += ' Stok güncellemeleri: ' + ', '.join(stock_messages)
+                        flash(success_msg, 'success')
+                        return redirect(url_for('sulama'))
+                    else:
+                        conn.rollback()
+                        error_msg = 'Stok yetersiz: ' + ', '.join([result[1] for result in stock_results if not result[0]])
+                        flash(error_msg, 'error')
+            else:
+                # Handle single entry
+                tarih = request.form['tarih']
+                saat = request.form.get('saat', '').strip()
+                sera_adi = request.form['sera_adi'].strip()
+                sulama_turu = request.form['sulama_turu']
+                miktar = float(request.form['miktar'])
+                gubre_kimyasal = request.form.get('gubre_kimyasal', '').strip()
+                gubre_miktari = float(request.form.get('gubre_miktari', 0) or 0)
+                personel = request.form['personel'].strip()
+                notlar = request.form.get('notlar', '').strip()
             
             if not sera_adi or not personel or not tarih or miktar <= 0:
                 flash('Sera adı, personel, tarih ve miktar zorunludur!', 'error')
@@ -1140,10 +1229,10 @@ def sulama():
                 if stock_success:
                     audit_fields = add_audit_fields_for_create()
                     conn.execute("""
-                        INSERT INTO sulama (tarih, sera_adi, sulama_turu, miktar, gubre_kimyasal, 
+                        INSERT INTO sulama (tarih, saat, sera_adi, sulama_turu, miktar, gubre_kimyasal, 
                                           gubre_miktari, personel, notlar, created_by, modified_by, modified_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (tarih, sera_adi, sulama_turu, miktar, gubre_kimyasal, gubre_miktari, 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (tarih, saat, sera_adi, sulama_turu, miktar, gubre_kimyasal, gubre_miktari, 
                           personel, notlar, audit_fields['created_by'], audit_fields['modified_by'], 
                           audit_fields['modified_at']))
                     conn.commit()
@@ -1206,6 +1295,21 @@ def sulama():
         ORDER BY malzeme_adi
     """).fetchall()
     
+    # Get daily summaries for the last 7 days
+    daily_summaries = conn.execute("""
+        SELECT tarih, 
+               COUNT(*) as toplam_seans,
+               COALESCE(SUM(miktar), 0) as toplam_su,
+               COALESCE(GROUP_CONCAT(DISTINCT saat), '') as saatler,
+               COALESCE(SUM(CASE WHEN sulama_turu = 'Normal' THEN 1 ELSE 0 END), 0) as normal_seans,
+               COALESCE(SUM(CASE WHEN sulama_turu = 'Gübreli' THEN 1 ELSE 0 END), 0) as gubreli_seans,
+               COALESCE(SUM(CASE WHEN sulama_turu = 'İlaçlı' THEN 1 ELSE 0 END), 0) as ilacli_seans
+        FROM sulama 
+        WHERE tarih >= date('now', '-7 days')
+        GROUP BY tarih
+        ORDER BY tarih DESC
+    """).fetchall()
+    
     conn.close()
     
     return render_template('sulama.html', 
@@ -1213,7 +1317,8 @@ def sulama():
                          bu_ay_sulama=bu_ay_sulama,
                          gubre_istatistik=gubre_istatistik,
                          available_fertilizers=available_fertilizers,
-                         available_chemicals=available_chemicals)
+                         available_chemicals=available_chemicals,
+                         daily_summaries=daily_summaries)
 
 @app.route("/gubreleme", methods=["GET", "POST"])
 @login_required
