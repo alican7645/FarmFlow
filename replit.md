@@ -16,39 +16,59 @@ Preferred communication style: Simple, everyday language.
 - **Language**: Turkish language interface for local market
 
 ## Backend Architecture
-- **Web Framework**: Flask with simple route-based architecture
-- **Database ORM**: Direct SQLite3 queries (no ORM abstraction)
-- **Session Management**: Flask sessions with configurable secret key
-- **Error Handling**: Basic logging configuration with DEBUG level
-- **File Structure**: Single-file application (app.py) with separate templates and static assets
+- **Web Framework**: Flask with route-based architecture and authentication
+- **Database Systems**: Dual database setup - SQLite3 for operational data, PostgreSQL for user management
+- **ORM**: SQLAlchemy for PostgreSQL user management, direct SQLite3 queries for business data
+- **Authentication**: Flask-Login with secure password hashing and session management
+- **Session Management**: Flask sessions with PostgreSQL-backed user storage
+- **Error Handling**: Enhanced logging configuration with DEBUG level
+- **File Structure**: Modular structure with separate models.py for user management
 
 ## Data Storage Solutions
-- **Primary Database**: SQLite3 file-based database (sera.db)
-- **Database Schema**: Four main tables:
+- **Operational Database**: SQLite3 file-based database (sera.db) for business operations
+- **User Database**: PostgreSQL for user authentication and management
+- **SQLite Schema**: Six main tables:
   - `uretim` (production): Tracks greenhouse plantings, harvests, and yields
   - `hasat` (harvest): Records detailed harvest operations with plot/field, quantities, personnel, and delivery information
   - `stok` (inventory): Manages material stock levels with minimum thresholds
-  - `iscilik` (labor): Records worker hours, tasks, and wages
-- **Data Persistence**: File-based storage suitable for small to medium operations
+  - `personel` (personnel): Employee information and monthly salary tracking
+  - `devam` (attendance): Daily attendance tracking for all personnel
+  - `gorevler` (tasks): Task assignments and completion tracking
+- **PostgreSQL Schema**: User management tables:
+  - `users`: User accounts with roles and authentication data
+  - `login_attempts`: Security logging for login attempts
+- **Data Persistence**: Hybrid approach combining file-based and cloud database storage
 
 ## Core Features
 - **Production Management**: Track planting dates, harvest schedules, greenhouse assignments, and yield calculations
 - **Harvest Management**: Record detailed harvest operations including dates, plot/field locations, quantities, responsible personnel, and delivery destinations
 - **Inventory Control**: Monitor stock levels with low-stock alerts and material categorization
-- **Labor Tracking**: Record worker hours, calculate wages, and track task assignments
-- **Dashboard Analytics**: Summary statistics and operational overview including harvest metrics
-- **Reporting System**: Monthly production reports with success rates and yield analysis
+- **Personnel Management**: Monthly salary-based employee tracking with position management
+- **Attendance Tracking**: Daily attendance monitoring with status tracking (present/absent/leave/sick)
+- **Task Management**: Assignment and tracking of daily tasks for personnel
+- **User Management**: Admin control panel for creating and managing user accounts
+- **Security Features**: Login attempt monitoring, role-based access control, secure authentication
+- **Dashboard Analytics**: Summary statistics and operational overview including personnel costs
+- **Reporting System**: Monthly production reports and Excel export for attendance data
 
 ## Authentication and Authorization
-- **Current State**: No authentication system implemented
-- **Session Security**: Basic Flask session handling with secret key configuration
-- **Access Control**: Open access to all features (suitable for single-user or trusted environment)
+- **Authentication System**: Flask-Login with PostgreSQL user management
+- **User Management**: Admin control panel for creating and managing user accounts
+- **Role-Based Access**: Admin and regular user roles with different permissions
+- **Session Security**: Secure session handling with PostgreSQL-backed user storage
+- **Login Tracking**: Failed login attempt monitoring and user activity logging
+- **Default Admin**: System creates default admin user (admin/admin123) on first startup
 
 # External Dependencies
 
 ## Core Dependencies
 - **Flask**: Web framework for routing and template rendering
-- **SQLite3**: Built-in Python database for data persistence
+- **Flask-Login**: User session management and authentication
+- **Flask-SQLAlchemy**: PostgreSQL ORM for user management
+- **SQLite3**: Built-in Python database for operational data persistence
+- **PostgreSQL**: Cloud database for user authentication and security
+- **Werkzeug**: Password hashing and security utilities
+- **openpyxl**: Excel file generation for attendance reports
 - **Jinja2**: Template engine (included with Flask)
 
 ## Frontend Dependencies

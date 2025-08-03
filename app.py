@@ -1,17 +1,55 @@
 import os
 import sqlite3
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response, send_file, session
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash
 from datetime import datetime, date, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import io
+from functools import wraps
+
+# Import models
+from models import db, User, LoginAttempt
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "sera-yonetim-secret-key")
+
+# PostgreSQL Database configuration
+database_url = os.environ.get('DATABASE_URL')
+if not database_url:
+    # Fallback to individual PostgreSQL environment variables
+    host = os.environ.get('PGHOST', 'localhost')
+    port = os.environ.get('PGPORT', '5432')
+    database = os.environ.get('PGDATABASE', 'postgres')
+    user = os.environ.get('PGUSER', 'postgres')
+    password = os.environ.get('PGPASSWORD', '')
+    database_url = f'postgresql://{user}:{password}@{host}:{port}/{database}'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
+
+# Initialize database with app
+db.init_app(app)
+
+# Flask-Login configuration
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Bu sayfaya erişmek için giriş yapmalısınız.'
+login_manager.login_message_category = 'info'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 # --- DATABASE OLUŞTURMA ---
 def init_db():
@@ -109,8 +147,26 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Initialize database on startup
+# Initialize databases on startup
 init_db()
+
+# Create PostgreSQL tables and default admin user
+with app.app_context():
+    db.create_all()
+    
+    # Create default admin user if not exists
+    admin_user = User.query.filter_by(kullanici_adi='admin').first()
+    if not admin_user:
+        admin_user = User(
+            kullanici_adi='admin',
+            email='admin@sera.com',
+            ad_soyad='Sistem Yöneticisi',
+            rol='admin'
+        )
+        admin_user.set_password('admin123')
+        db.session.add(admin_user)
+        db.session.commit()
+        print("Default admin user created: admin / admin123")
 
 # --- YARDIMCI FONKSİYONLAR ---
 def get_dashboard_stats():
@@ -153,13 +209,166 @@ def get_dashboard_stats():
         'bu_ay_hasat': bu_ay_hasat
     }
 
+# --- YARDIMCI DECORATORLER ---
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash('Bu sayfaya erişmek için admin yetkisine sahip olmalısınız.', 'error')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # --- ROTALAR ---
 
 @app.route("/")
 def index():
-    return redirect(url_for('dashboard'))
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == "POST":
+        kullanici_adi = request.form['kullanici_adi'].strip()
+        password = request.form['password']
+        remember = bool(request.form.get('remember'))
+        
+        # Login attempt kaydı
+        attempt = LoginAttempt(
+            kullanici_adi=kullanici_adi,
+            ip_adresi=request.remote_addr
+        )
+        
+        user = User.query.filter_by(kullanici_adi=kullanici_adi, aktif=True).first()
+        
+        if user and user.check_password(password):
+            login_user(user, remember=remember)
+            user.son_giris = datetime.utcnow()
+            attempt.basarili = True
+            db.session.add(attempt)
+            db.session.commit()
+            
+            next_page = request.args.get('next')
+            if next_page:
+                return redirect(next_page)
+            
+            flash(f'Hoş geldiniz, {user.ad_soyad or user.kullanici_adi}!', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            attempt.basarili = False
+            db.session.add(attempt)
+            db.session.commit()
+            flash('Kullanıcı adı veya şifre hatalı!', 'error')
+    
+    return render_template('login.html')
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash('Başarıyla çıkış yaptınız.', 'info')
+    return redirect(url_for('login'))
+
+@app.route("/admin")
+@login_required
+@admin_required
+def admin_panel():
+    # Kullanıcı listesi
+    users = User.query.order_by(User.olusturma_tarihi.desc()).all()
+    
+    # Son giriş denemeleri
+    recent_attempts = LoginAttempt.query.order_by(LoginAttempt.deneme_tarihi.desc()).limit(20).all()
+    
+    # İstatistikler
+    stats = {
+        'total_users': User.query.count(),
+        'active_users': User.query.filter_by(aktif=True).count(),
+        'admin_users': User.query.filter_by(rol='admin').count(),
+        'failed_attempts_today': LoginAttempt.query.filter(
+            LoginAttempt.deneme_tarihi >= datetime.utcnow().date(),
+            LoginAttempt.basarili == False
+        ).count()
+    }
+    
+    return render_template('admin.html', users=users, recent_attempts=recent_attempts, stats=stats)
+
+@app.route("/admin/user/add", methods=["POST"])
+@login_required
+@admin_required
+def admin_add_user():
+    try:
+        kullanici_adi = request.form['kullanici_adi'].strip()
+        password = request.form['password']
+        ad_soyad = request.form['ad_soyad'].strip()
+        email = request.form.get('email', '').strip()
+        rol = request.form['rol']
+        
+        # Kullanıcı adı kontrolü
+        if User.query.filter_by(kullanici_adi=kullanici_adi).first():
+            flash('Bu kullanıcı adı zaten kullanımda!', 'error')
+            return redirect(url_for('admin_panel'))
+        
+        # Email kontrolü
+        if email and User.query.filter_by(email=email).first():
+            flash('Bu e-posta adresi zaten kullanımda!', 'error')
+            return redirect(url_for('admin_panel'))
+        
+        # Yeni kullanıcı oluştur
+        new_user = User(
+            kullanici_adi=kullanici_adi,
+            ad_soyad=ad_soyad,
+            email=email if email else None,
+            rol=rol
+        )
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        flash(f'Kullanıcı "{kullanici_adi}" başarıyla oluşturuldu!', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Kullanıcı oluşturulurken hata: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_panel'))
+
+@app.route("/admin/user/toggle/<int:user_id>")
+@login_required
+@admin_required
+def admin_toggle_user(user_id):
+    user = User.query.get_or_404(user_id)
+    
+    if user.id == current_user.id:
+        flash('Kendi hesabınızı devre dışı bırakamazsınız!', 'error')
+    else:
+        user.aktif = not user.aktif
+        db.session.commit()
+        
+        status = 'aktif' if user.aktif else 'pasif'
+        flash(f'Kullanıcı "{user.kullanici_adi}" {status} duruma getirildi.', 'success')
+    
+    return redirect(url_for('admin_panel'))
+
+@app.route("/admin/user/reset-password/<int:user_id>", methods=["POST"])
+@login_required
+@admin_required
+def admin_reset_password(user_id):
+    user = User.query.get_or_404(user_id)
+    new_password = request.form['new_password']
+    
+    user.set_password(new_password)
+    db.session.commit()
+    
+    flash(f'Kullanıcı "{user.kullanici_adi}" şifresi başarıyla güncellendi!', 'success')
+    return redirect(url_for('admin_panel'))
 
 @app.route("/dashboard")
+@login_required
 def dashboard():
     stats = get_dashboard_stats()
     
@@ -187,6 +396,7 @@ def dashboard():
                          son_gorevler=son_gorevler)
 
 @app.route("/uretim", methods=["GET", "POST"])
+@login_required
 def uretim():
     conn = get_db_connection()
     
@@ -222,6 +432,7 @@ def uretim():
     return render_template("uretim.html", uretimler=uretimler)
 
 @app.route("/uretim/guncelle/<int:id>", methods=["POST"])
+@login_required
 def uretim_guncelle(id):
     conn = get_db_connection()
     
@@ -249,6 +460,7 @@ def uretim_guncelle(id):
     return redirect(url_for('uretim'))
 
 @app.route("/stok", methods=["GET", "POST"])
+@login_required
 def stok():
     conn = get_db_connection()
     
@@ -324,6 +536,7 @@ def stok():
     return render_template("stok.html", stoklar=stoklar, dusuk_stoklar=dusuk_stoklar)
 
 @app.route("/personel", methods=["GET", "POST"])
+@login_required
 def personel():
     conn = get_db_connection()
     
@@ -414,6 +627,7 @@ def personel():
                          personel_istatistik=personel_istatistik)
 
 @app.route("/devam", methods=["GET", "POST"])
+@login_required
 def devam():
     conn = get_db_connection()
     
@@ -493,6 +707,7 @@ def devam():
                          bugun=bugun)
 
 @app.route("/devam/excel-export")
+@login_required
 def devam_excel_export():
     conn = get_db_connection()
     
@@ -606,6 +821,7 @@ def devam_excel_export():
     return response
 
 @app.route("/hasat", methods=["GET", "POST"])
+@login_required
 def hasat():
     conn = get_db_connection()
     
@@ -678,6 +894,7 @@ def hasat():
                          hasat_eden_istatistik=hasat_eden_istatistik)
 
 @app.route("/rapor")
+@login_required
 def rapor():
     conn = get_db_connection()
     

@@ -66,12 +66,54 @@
                             <i class="fas fa-chart-bar me-1"></i>Raporlar
                         </a>
                     </li>
+                    {% if current_user.is_authenticated and current_user.is_admin() %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'admin_panel' %}active{% endif %}" 
+                           href="{{ url_for('admin_panel') }}">
+                            <i class="fas fa-user-shield me-1"></i>Admin Panel
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
                 
-                <span class="navbar-text">
-                    <i class="fas fa-calendar-alt me-1"></i>
-                    {{ moment().format('DD MMMM YYYY') if moment else '' }}
-                </span>
+                <!-- User Info & Actions -->
+                <ul class="navbar-nav">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user me-1"></i>
+                            {{ current_user.ad_soyad or current_user.kullanici_adi }}
+                            {% if current_user.is_admin() %}
+                            <span class="badge bg-warning ms-1">Admin</span>
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">
+                                <i class="fas fa-user me-2"></i>{{ current_user.ad_soyad or current_user.kullanici_adi }}
+                            </h6></li>
+                            <li><span class="dropdown-item-text">
+                                <small class="text-muted">@{{ current_user.kullanici_adi }}</small>
+                            </span></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% if current_user.is_admin() %}
+                            <li><a class="dropdown-item" href="{{ url_for('admin_panel') }}">
+                                <i class="fas fa-user-shield me-2"></i>Admin Panel
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i>Çıkış Yap
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">
+                            <i class="fas fa-sign-in-alt me-1"></i>Giriş Yap
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
             </div>
         </div>
     </nav>
@@ -82,8 +124,20 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
-                    <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' }} me-2"></i>
+                {% set alert_class = 'success' %}
+                {% set alert_icon = 'check-circle' %}
+                {% if category == 'error' %}
+                    {% set alert_class = 'danger' %}
+                    {% set alert_icon = 'exclamation-triangle' %}
+                {% elif category == 'warning' %}
+                    {% set alert_class = 'warning' %}
+                    {% set alert_icon = 'exclamation-circle' %}
+                {% elif category == 'info' %}
+                    {% set alert_class = 'info' %}
+                    {% set alert_icon = 'info-circle' %}
+                {% endif %}
+                <div class="alert alert-{{ alert_class }} alert-dismissible fade show" role="alert">
+                    <i class="fas fa-{{ alert_icon }} me-2"></i>
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
