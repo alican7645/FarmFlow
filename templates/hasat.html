@@ -122,6 +122,7 @@
                         <th>Üretim</th>
                         <th>Parsel/Alan</th>
                         <th>Miktar (kg)</th>
+                        <th>Kutu/Palet</th>
                         <th>Hasat Eden</th>
                         <th>Teslim Edilen</th>
                         <th>Notlar</th>
@@ -144,6 +145,18 @@
                         <td>{{ hasat.parsil_alan }}</td>
                         <td>
                             <strong>{{ "%.1f"|format(hasat.hasat_miktari) }} kg</strong>
+                        </td>
+                        <td>
+                            {% if hasat.kutu_sayisi > 0 or hasat.palet_sayisi > 0 %}
+                                {% if hasat.kutu_sayisi > 0 %}
+                                <span class="badge bg-info me-1">{{ hasat.kutu_sayisi|int }} Kutu</span>
+                                {% endif %}
+                                {% if hasat.palet_sayisi > 0 %}
+                                <span class="badge bg-warning">{{ hasat.palet_sayisi|int }} Palet</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
                         </td>
                         <td>{{ hasat.hasat_eden }}</td>
                         <td>
@@ -209,6 +222,21 @@
                             <label class="form-label">Hasat Eden *</label>
                             <input type="text" name="hasat_eden" class="form-control" required 
                                    placeholder="Örn: Mehmet Yılmaz">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Kullanılan Kutu Sayısı</label>
+                            <input type="number" name="kutu_sayisi" class="form-control" 
+                                   step="1" min="0" placeholder="Örn: 15">
+                            <small class="form-text text-muted">Stoktan otomatik düşülecek</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Kullanılan Palet Sayısı</label>
+                            <input type="number" name="palet_sayisi" class="form-control" 
+                                   step="1" min="0" placeholder="Örn: 2">
+                            <small class="form-text text-muted">Stoktan otomatik düşülecek</small>
                         </div>
                     </div>
                     

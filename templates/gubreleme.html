@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Gübreleme Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-seedling me-2"></i>
+            Gübreleme Yönetimi
+        </h1>
+        <p class="text-muted">Sera gübre uygulamalarınızı buradan takip edebilirsiniz. Gübre kullanımı stoktan otomatik düşülecektir.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#yeniGubreModal">
+            <i class="fas fa-plus me-2"></i>Yeni Gübreleme Kaydı
+        </button>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Bu Ay Toplam</h6>
+                        <h4 class="mb-0">{{ "%.1f"|format(bu_ay_gubre) }} kg</h4>
+                        <small class="text-muted">Gübre kullanımı</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-seedling fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-info">Toplam Kayıt</h6>
+                        <h4 class="mb-0">{{ gubrelemeler|length }}</h4>
+                        <small class="text-muted">Gübreleme işlemi</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-clipboard-list fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Gübre Çeşidi</h6>
+                        <h4 class="mb-0">{{ gubre_turu_istatistik|length }}</h4>
+                        <small class="text-muted">Farklı tür</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-flask fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gübre Türü İstatistikleri -->
+{% if gubre_turu_istatistik %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-bar me-2"></i>Bu Ay Gübre Türü Kullanımı
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Gübre Adı</th>
+                        <th>Kullanım Sayısı</th>
+                        <th>Toplam Miktar (kg)</th>
+                        <th>Ortalama (kg/uygulama)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for istatistik in gubre_turu_istatistik %}
+                    <tr>
+                        <td><strong>{{ istatistik.gubre_adi }}</strong></td>
+                        <td>{{ istatistik.kullanim_sayisi }}</td>
+                        <td>{{ "%.1f"|format(istatistik.toplam_miktar) }} kg</td>
+                        <td>{{ "%.1f"|format(istatistik.toplam_miktar / istatistik.kullanim_sayisi if istatistik.kullanim_sayisi > 0 else 0) }} kg</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Gübreleme Kayıtları -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Gübreleme Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if gubrelemeler %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Sera</th>
+                        <th>Gübre Adı</th>
+                        <th>Miktar (kg)</th>
+                        <th>Uygulama Şekli</th>
+                        <th>Personel</th>
+                        <th>Notlar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for gubreleme in gubrelemeler %}
+                    <tr>
+                        <td><strong>{{ gubreleme.tarih }}</strong></td>
+                        <td>{{ gubreleme.sera_adi }}</td>
+                        <td><strong>{{ gubreleme.gubre_adi }}</strong></td>
+                        <td>{{ "%.1f"|format(gubreleme.gubre_miktari) }} kg</td>
+                        <td>
+                            {% if gubreleme.uygulama_sekli %}
+                            <span class="badge bg-{% if gubreleme.uygulama_sekli == 'Yaprak' %}success{% elif gubreleme.uygulama_sekli == 'Kök' %}primary{% else %}info{% endif %}">
+                                {{ gubreleme.uygulama_sekli }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ gubreleme.personel }}</td>
+                        <td>
+                            {% if gubreleme.notlar %}
+                            <small class="text-muted">{{ gubreleme.notlar }}</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-seedling fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz gübreleme kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk gübreleme kaydınızı eklemek için "Yeni Gübreleme Kaydı" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni Gübreleme Modal -->
+<div class="modal fade" id="yeniGubreModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Yeni Gübreleme Kaydı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tarih *</label>
+                            <input type="date" name="tarih" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sera Adı *</label>
+                            <input type="text" name="sera_adi" class="form-control" required 
+                                   placeholder="Örn: 1 Nolu Sera">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Gübre Adı *</label>
+                            <input type="text" name="gubre_adi" class="form-control" required 
+                                   placeholder="Örn: NPK 15-15-15, Urea, Organik Gübre">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Gübre Miktarı (kg) *</label>
+                            <input type="number" name="gubre_miktari" class="form-control" required 
+                                   step="0.1" min="0" placeholder="Örn: 5.5">
+                            <small class="form-text text-muted">Stoktan otomatik düşülecek</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Uygulama Şekli</label>
+                            <select name="uygulama_sekli" class="form-select">
+                                <option value="">Seçin</option>
+                                <option value="Yaprak">Yaprak Gübrelemesi</option>
+                                <option value="Kök">Kök Gübrelemesi</option>
+                                <option value="Karışım">Su ile Karışım</option>
+                                <option value="Granül">Granül Serpme</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Personel *</label>
+                            <input type="text" name="personel" class="form-control" required 
+                                   placeholder="Örn: Mehmet Yılmaz">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="3" 
+                                  placeholder="Hava durumu, dozaj bilgisi, özel notlar..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>Not:</strong> Girilen gübre miktarı stoktan otomatik olarak düşülecektir. Stok yetersizse işlem gerçekleşmeyecektir.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

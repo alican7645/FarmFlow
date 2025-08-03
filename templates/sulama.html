@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Sulama Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-tint me-2"></i>
+            Sulama Yönetimi
+        </h1>
+        <p class="text-muted">Sera sulama işlemlerinizi ve gübre/kimyasal kullanımınızı buradan takip edebilirsiniz.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#yeniSulamaModal">
+            <i class="fas fa-plus me-2"></i>Yeni Sulama Kaydı
+        </button>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Bu Ay Toplam</h6>
+                        <h4 class="mb-0">{{ "%.0f"|format(bu_ay_sulama) }} L</h4>
+                        <small class="text-muted">Sulama miktarı</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-tint fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Toplam Kayıt</h6>
+                        <h4 class="mb-0">{{ sulamalar|length }}</h4>
+                        <small class="text-muted">Sulama işlemi</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-clipboard-list fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-info">Gübre Kullanımı</h6>
+                        <h4 class="mb-0">{{ gubre_istatistik|length }}</h4>
+                        <small class="text-muted">Farklı tür</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-seedling fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gübre İstatistikleri -->
+{% if gubre_istatistik %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-bar me-2"></i>Bu Ay Gübre/Kimyasal Kullanımı
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Sulama Türü</th>
+                        <th>Kullanım Sayısı</th>
+                        <th>Toplam Miktar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for istatistik in gubre_istatistik %}
+                    <tr>
+                        <td>
+                            <span class="badge bg-{% if istatistik.sulama_turu == 'Gübreli' %}success{% else %}warning{% endif %}">
+                                {{ istatistik.sulama_turu }}
+                            </span>
+                        </td>
+                        <td>{{ istatistik.kayit_sayisi }}</td>
+                        <td>{{ "%.1f"|format(istatistik.toplam_miktar) }} kg/L</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Sulama Kayıtları -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Sulama Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if sulamalar %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Sera</th>
+                        <th>Tür</th>
+                        <th>Su Miktarı</th>
+                        <th>Gübre/Kimyasal</th>
+                        <th>Personel</th>
+                        <th>Notlar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sulama in sulamalar %}
+                    <tr>
+                        <td><strong>{{ sulama.tarih }}</strong></td>
+                        <td>{{ sulama.sera_adi }}</td>
+                        <td>
+                            <span class="badge bg-{% if sulama.sulama_turu == 'Normal' %}primary{% elif sulama.sulama_turu == 'Gübreli' %}success{% else %}warning{% endif %}">
+                                {{ sulama.sulama_turu }}
+                            </span>
+                        </td>
+                        <td><strong>{{ "%.0f"|format(sulama.miktar) }} L</strong></td>
+                        <td>
+                            {% if sulama.gubre_kimyasal and sulama.gubre_miktari > 0 %}
+                            <strong>{{ sulama.gubre_kimyasal }}</strong>
+                            <br><small class="text-muted">{{ "%.1f"|format(sulama.gubre_miktari) }} kg/L</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ sulama.personel }}</td>
+                        <td>
+                            {% if sulama.notlar %}
+                            <small class="text-muted">{{ sulama.notlar }}</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-tint fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz sulama kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk sulama kaydınızı eklemek için "Yeni Sulama Kaydı" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni Sulama Modal -->
+<div class="modal fade" id="yeniSulamaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Yeni Sulama Kaydı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tarih *</label>
+                            <input type="date" name="tarih" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sera Adı *</label>
+                            <input type="text" name="sera_adi" class="form-control" required 
+                                   placeholder="Örn: 1 Nolu Sera">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sulama Türü *</label>
+                            <select name="sulama_turu" class="form-select" required id="sulamaTuru">
+                                <option value="">Tür Seçin</option>
+                                <option value="Normal">Normal Su</option>
+                                <option value="Gübreli">Gübreli Su</option>
+                                <option value="İlaçlı">İlaçlı/Kimyasallı Su</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Su Miktarı (Litre) *</label>
+                            <input type="number" name="miktar" class="form-control" required 
+                                   step="0.1" min="0" placeholder="Örn: 500">
+                        </div>
+                    </div>
+                    
+                    <div class="row" id="gubreKimyasalFields" style="display: none;">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Gübre/Kimyasal Adı</label>
+                            <input type="text" name="gubre_kimyasal" class="form-control" 
+                                   placeholder="Örn: NPK, Urea, Fungisit">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Gübre/Kimyasal Miktarı (kg/L)</label>
+                            <input type="number" name="gubre_miktari" class="form-control" 
+                                   step="0.1" min="0" placeholder="Örn: 2.5">
+                            <small class="form-text text-muted">Stoktan otomatik düşülecek</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Personel *</label>
+                            <input type="text" name="personel" class="form-control" required 
+                                   placeholder="Örn: Ahmet Yılmaz">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="3" 
+                                  placeholder="Hava durumu, özel notlar..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('sulamaTuru').addEventListener('change', function() {
+    const gubreFields = document.getElementById('gubreKimyasalFields');
+    if (this.value === 'Gübreli' || this.value === 'İlaçlı') {
+        gubreFields.style.display = 'block';
+    } else {
+        gubreFields.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

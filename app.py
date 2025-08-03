@@ -140,6 +140,39 @@ def init_db():
         FOREIGN KEY (personel_id) REFERENCES personel (id)
     )''')
 
+    # Sulama Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS sulama (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarih TEXT NOT NULL,
+        sera_adi TEXT NOT NULL,
+        sulama_turu TEXT NOT NULL, -- 'Normal', 'Gübreli', 'İlaçlı'
+        miktar REAL NOT NULL, -- Litre
+        gubre_kimyasal TEXT, -- Kullanılan gübre/kimyasal adı
+        gubre_miktari REAL DEFAULT 0, -- Kullanılan gübre/kimyasal miktarı
+        personel TEXT NOT NULL,
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    # Gübreleme Tablosu
+    c.execute('''CREATE TABLE IF NOT EXISTS gubreleme (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarih TEXT NOT NULL,
+        sera_adi TEXT NOT NULL,
+        gubre_adi TEXT NOT NULL,
+        gubre_miktari REAL NOT NULL,
+        uygulama_sekli TEXT, -- 'Yaprak', 'Kök', 'Karışım'
+        personel TEXT NOT NULL,
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
     # Hasat Tablosu
     c.execute('''CREATE TABLE IF NOT EXISTS hasat (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,6 +182,8 @@ def init_db():
         hasat_miktari REAL NOT NULL,
         hasat_eden TEXT NOT NULL,
         teslim_edilen TEXT,
+        kutu_sayisi REAL DEFAULT 0,
+        palet_sayisi REAL DEFAULT 0,
         notlar TEXT,
         olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT,
@@ -160,7 +195,7 @@ def init_db():
     # Mevcut tablolara audit alanlarını ekle (migration)
     try:
         # Check if audit columns exist, if not add them
-        tables_to_migrate = ['uretim', 'stok', 'personel', 'devam', 'gorevler', 'hasat']
+        tables_to_migrate = ['uretim', 'stok', 'personel', 'devam', 'gorevler', 'hasat', 'sulama', 'gubreleme']
         
         for table in tables_to_migrate:
             # Check if created_by column exists
@@ -176,6 +211,14 @@ def init_db():
                 # Set initial values for existing records
                 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 c.execute(f"UPDATE {table} SET modified_at = ? WHERE modified_at IS NULL", (current_time,))
+                
+        # Add new columns to hasat table for box/pallet integration
+        c.execute("PRAGMA table_info(hasat)")
+        hasat_columns = [row[1] for row in c.fetchall()]
+        if 'kutu_sayisi' not in hasat_columns:
+            c.execute("ALTER TABLE hasat ADD COLUMN kutu_sayisi REAL DEFAULT 0")
+        if 'palet_sayisi' not in hasat_columns:
+            c.execute("ALTER TABLE hasat ADD COLUMN palet_sayisi REAL DEFAULT 0")
                 
     except Exception as e:
         print(f"Migration error: {e}")
@@ -213,6 +256,59 @@ def add_audit_fields_for_update():
         'modified_by': username,
         'modified_at': timestamp
     }
+
+# --- STOCK DEDUCTION HELPER FUNCTIONS ---
+def deduct_stock_item(conn, kategori, miktar, operation_description=""):
+    """
+    Automatically deduct stock items by category
+    Returns True if successful, False if insufficient stock
+    """
+    try:
+        # Find the first available item in the category with sufficient stock
+        item = conn.execute("""
+            SELECT id, malzeme_adi, miktar, birim 
+            FROM stok 
+            WHERE kategori = ? AND miktar >= ? 
+            ORDER BY tarih ASC 
+            LIMIT 1
+        """, (kategori, miktar)).fetchone()
+        
+        if not item:
+            return False, f"Yetersiz {kategori.lower()} stoku (gerekli: {miktar})"
+        
+        # Deduct the quantity
+        audit_fields = add_audit_fields_for_update()
+        new_quantity = item['miktar'] - miktar
+        
+        conn.execute("""
+            UPDATE stok 
+            SET miktar = ?, modified_by = ?, modified_at = ?, 
+                notlar = COALESCE(notlar, '') || CASE 
+                    WHEN COALESCE(notlar, '') = '' THEN ? 
+                    ELSE '; ' || ? 
+                END
+            WHERE id = ?
+        """, (new_quantity, audit_fields['modified_by'], audit_fields['modified_at'],
+              operation_description, operation_description, item['id']))
+        
+        return True, f"{miktar} {item['birim']} {item['malzeme_adi']} stoktan düşüldü"
+        
+    except Exception as e:
+        return False, f"Stok düşme hatası: {str(e)}"
+
+def batch_deduct_stock(conn, deductions):
+    """
+    Batch deduct multiple stock items
+    deductions: list of (kategori, miktar, operation_description) tuples
+    """
+    results = []
+    for kategori, miktar, operation_description in deductions:
+        if miktar > 0:  # Only process if quantity > 0
+            success, message = deduct_stock_item(conn, kategori, miktar, operation_description)
+            results.append((success, message))
+            if not success:
+                return False, results  # Stop on first failure
+    return True, results
 
 # Initialize databases on startup
 init_db()
@@ -916,22 +1012,49 @@ def hasat():
             hasat_miktari = float(request.form['hasat_miktari'])
             hasat_eden = request.form['hasat_eden'].strip()
             teslim_edilen = request.form.get('teslim_edilen', '').strip()
+            kutu_sayisi = float(request.form.get('kutu_sayisi', 0) or 0)
+            palet_sayisi = float(request.form.get('palet_sayisi', 0) or 0)
             notlar = request.form.get('notlar', '').strip()
             
             if not parsil_alan or not hasat_eden or not hasat_tarihi:
                 flash('Hasat tarihi, parsel/alan ve hasat eden kişi zorunludur!', 'error')
             else:
-                audit_fields = add_audit_fields_for_create()
-                conn.execute("""
-                    INSERT INTO hasat (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
-                                     hasat_eden, teslim_edilen, notlar, created_by, modified_by, modified_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
-                      hasat_eden, teslim_edilen, notlar, audit_fields['created_by'], 
-                      audit_fields['modified_by'], audit_fields['modified_at']))
-                conn.commit()
-                flash('Hasat kaydı başarıyla eklendi!', 'success')
-                return redirect(url_for('hasat'))
+                # Prepare stock deductions
+                deductions = []
+                if kutu_sayisi > 0:
+                    deductions.append(('Kutu', kutu_sayisi, f'Hasat kullanımı - {hasat_tarihi} - {parsil_alan}'))
+                if palet_sayisi > 0:
+                    deductions.append(('Palet', palet_sayisi, f'Hasat kullanımı - {hasat_tarihi} - {parsil_alan}'))
+                
+                # Check stock availability and deduct if possible
+                stock_success = True
+                stock_messages = []
+                
+                if deductions:
+                    stock_success, stock_results = batch_deduct_stock(conn, deductions)
+                    stock_messages = [result[1] for result in stock_results]
+                
+                if stock_success:
+                    audit_fields = add_audit_fields_for_create()
+                    conn.execute("""
+                        INSERT INTO hasat (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
+                                         hasat_eden, teslim_edilen, kutu_sayisi, palet_sayisi, notlar, 
+                                         created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
+                          hasat_eden, teslim_edilen, kutu_sayisi, palet_sayisi, notlar, 
+                          audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+                    conn.commit()
+                    
+                    success_msg = 'Hasat kaydı başarıyla eklendi!'
+                    if stock_messages:
+                        success_msg += ' Stok güncellemeleri: ' + ', '.join(stock_messages)
+                    flash(success_msg, 'success')
+                    return redirect(url_for('hasat'))
+                else:
+                    conn.rollback()
+                    error_msg = 'Stok yetersiz: ' + ', '.join([result[1] for result in stock_results if not result[0]])
+                    flash(error_msg, 'error')
                 
         except ValueError:
             flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
@@ -977,6 +1100,184 @@ def hasat():
                          aktif_uretimler=aktif_uretimler,
                          bu_ay_toplam=bu_ay_toplam,
                          hasat_eden_istatistik=hasat_eden_istatistik)
+
+@app.route("/sulama", methods=["GET", "POST"])
+@login_required
+def sulama():
+    conn = get_db_connection()
+    
+    if request.method == "POST":
+        try:
+            tarih = request.form['tarih']
+            sera_adi = request.form['sera_adi'].strip()
+            sulama_turu = request.form['sulama_turu']
+            miktar = float(request.form['miktar'])
+            gubre_kimyasal = request.form.get('gubre_kimyasal', '').strip()
+            gubre_miktari = float(request.form.get('gubre_miktari', 0) or 0)
+            personel = request.form['personel'].strip()
+            notlar = request.form.get('notlar', '').strip()
+            
+            if not sera_adi or not personel or not tarih or miktar <= 0:
+                flash('Sera adı, personel, tarih ve miktar zorunludur!', 'error')
+            else:
+                # Prepare stock deductions
+                deductions = []
+                if gubre_miktari > 0 and gubre_kimyasal:
+                    if sulama_turu == 'Gübreli':
+                        deductions.append(('Gübre', gubre_miktari, f'Sulama kullanımı - {tarih} - {sera_adi}'))
+                    elif sulama_turu == 'İlaçlı':
+                        deductions.append(('Pestisit', gubre_miktari, f'Sulama kullanımı - {tarih} - {sera_adi}'))
+                        deductions.append(('Kimyasal', gubre_miktari, f'Sulama kullanımı - {tarih} - {sera_adi}'))
+                
+                # Process stock deductions
+                stock_success = True
+                stock_messages = []
+                
+                if deductions:
+                    stock_success, stock_results = batch_deduct_stock(conn, deductions)
+                    stock_messages = [result[1] for result in stock_results if result[0]]
+                
+                if stock_success:
+                    audit_fields = add_audit_fields_for_create()
+                    conn.execute("""
+                        INSERT INTO sulama (tarih, sera_adi, sulama_turu, miktar, gubre_kimyasal, 
+                                          gubre_miktari, personel, notlar, created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (tarih, sera_adi, sulama_turu, miktar, gubre_kimyasal, gubre_miktari, 
+                          personel, notlar, audit_fields['created_by'], audit_fields['modified_by'], 
+                          audit_fields['modified_at']))
+                    conn.commit()
+                    
+                    success_msg = 'Sulama kaydı başarıyla eklendi!'
+                    if stock_messages:
+                        success_msg += ' Stok güncellemeleri: ' + ', '.join(stock_messages)
+                    flash(success_msg, 'success')
+                    return redirect(url_for('sulama'))
+                else:
+                    conn.rollback()
+                    error_msg = 'Stok yetersiz: ' + ', '.join([result[1] for result in stock_results if not result[0]])
+                    flash(error_msg, 'error')
+                
+        except ValueError:
+            flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
+        except Exception as e:
+            flash(f'Hata oluştu: {str(e)}', 'error')
+            conn.rollback()
+        finally:
+            conn.close()
+    
+    # GET request - show irrigation records
+    conn = get_db_connection()
+    
+    # Get irrigation records
+    sulamalar = conn.execute("""
+        SELECT * FROM sulama 
+        ORDER BY tarih DESC, olusturma_tarihi DESC
+    """).fetchall()
+    
+    # Get monthly statistics
+    bu_ay = datetime.now().strftime('%Y-%m')
+    bu_ay_sulama = conn.execute("""
+        SELECT COALESCE(SUM(miktar), 0) as total 
+        FROM sulama 
+        WHERE tarih LIKE ?
+    """, (f"{bu_ay}%",)).fetchone()['total']
+    
+    # Get fertilizer usage statistics
+    gubre_istatistik = conn.execute("""
+        SELECT sulama_turu, COUNT(*) as kayit_sayisi, COALESCE(SUM(gubre_miktari), 0) as toplam_miktar
+        FROM sulama 
+        WHERE tarih LIKE ? AND gubre_miktari > 0
+        GROUP BY sulama_turu
+    """, (f"{bu_ay}%",)).fetchall()
+    
+    conn.close()
+    
+    return render_template('sulama.html', 
+                         sulamalar=sulamalar,
+                         bu_ay_sulama=bu_ay_sulama,
+                         gubre_istatistik=gubre_istatistik)
+
+@app.route("/gubreleme", methods=["GET", "POST"])
+@login_required
+def gubreleme():
+    conn = get_db_connection()
+    
+    if request.method == "POST":
+        try:
+            tarih = request.form['tarih']
+            sera_adi = request.form['sera_adi'].strip()
+            gubre_adi = request.form['gubre_adi'].strip()
+            gubre_miktari = float(request.form['gubre_miktari'])
+            uygulama_sekli = request.form.get('uygulama_sekli', '').strip()
+            personel = request.form['personel'].strip()
+            notlar = request.form.get('notlar', '').strip()
+            
+            if not sera_adi or not gubre_adi or not personel or not tarih or gubre_miktari <= 0:
+                flash('Sera adı, gübre adı, personel, tarih ve miktar zorunludur!', 'error')
+            else:
+                # Automatic stock deduction
+                deductions = [('Gübre', gubre_miktari, f'Gübreleme - {tarih} - {sera_adi}')]
+                stock_success, stock_results = batch_deduct_stock(conn, deductions)
+                
+                if stock_success:
+                    audit_fields = add_audit_fields_for_create()
+                    conn.execute("""
+                        INSERT INTO gubreleme (tarih, sera_adi, gubre_adi, gubre_miktari, uygulama_sekli, 
+                                             personel, notlar, created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (tarih, sera_adi, gubre_adi, gubre_miktari, uygulama_sekli, personel, 
+                          notlar, audit_fields['created_by'], audit_fields['modified_by'], 
+                          audit_fields['modified_at']))
+                    conn.commit()
+                    
+                    success_msg = f'Gübreleme kaydı başarıyla eklendi! {stock_results[0][1]}'
+                    flash(success_msg, 'success')
+                    return redirect(url_for('gubreleme'))
+                else:
+                    conn.rollback()
+                    flash(f'Stok yetersiz: {stock_results[0][1]}', 'error')
+                
+        except ValueError:
+            flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
+        except Exception as e:
+            flash(f'Hata oluştu: {str(e)}', 'error')
+            conn.rollback()
+        finally:
+            conn.close()
+    
+    # GET request - show fertilization records
+    conn = get_db_connection()
+    
+    # Get fertilization records
+    gubrelemeler = conn.execute("""
+        SELECT * FROM gubreleme 
+        ORDER BY tarih DESC, olusturma_tarihi DESC
+    """).fetchall()
+    
+    # Get monthly statistics
+    bu_ay = datetime.now().strftime('%Y-%m')
+    bu_ay_gubre = conn.execute("""
+        SELECT COALESCE(SUM(gubre_miktari), 0) as total 
+        FROM gubreleme 
+        WHERE tarih LIKE ?
+    """, (f"{bu_ay}%",)).fetchone()['total']
+    
+    # Get fertilizer type statistics
+    gubre_turu_istatistik = conn.execute("""
+        SELECT gubre_adi, COUNT(*) as kullanim_sayisi, COALESCE(SUM(gubre_miktari), 0) as toplam_miktar
+        FROM gubreleme 
+        WHERE tarih LIKE ?
+        GROUP BY gubre_adi
+        ORDER BY toplam_miktar DESC
+    """, (f"{bu_ay}%",)).fetchall()
+    
+    conn.close()
+    
+    return render_template('gubreleme.html', 
+                         gubrelemeler=gubrelemeler,
+                         bu_ay_gubre=bu_ay_gubre,
+                         gubre_turu_istatistik=gubre_turu_istatistik)
 
 @app.route("/audit-trail")
 @login_required

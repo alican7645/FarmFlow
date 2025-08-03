@@ -40,6 +40,20 @@
                             <i class="fas fa-cut me-1"></i>Hasat
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['sulama', 'gubreleme'] %}active{% endif %}" 
+                           href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-tint me-1"></i>Sulama & Gübre
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('sulama') }}">
+                                <i class="fas fa-tint me-2"></i>Sulama İşlemleri
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('gubreleme') }}">
+                                <i class="fas fa-seedling me-2"></i>Gübreleme İşlemleri
+                            </a></li>
+                        </ul>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'stok' %}active{% endif %}" 
                            href="{{ url_for('stok') }}">
