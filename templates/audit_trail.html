@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Takip - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-history me-2"></i>
+            Audit Takip
+        </h1>
+        <p class="text-muted">Sistemdeki tüm değişiklikleri ve kim tarafından yapıldığını görüntüleyin.</p>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-info">Bugünkü Değişiklikler</h6>
+                        <h4 class="mb-0">{{ stats.total_changes_today }}</h4>
+                        <small class="text-muted">Toplam işlem</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-edit fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Aktif Kullanıcı</h6>
+                        <h4 class="mb-0">{{ stats.active_users_today }}</h4>
+                        <small class="text-muted">Bugün işlem yapan</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-users fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Toplam Kayıt</h6>
+                        <h4 class="mb-0">{{ stats.total_records }}</h4>
+                        <small class="text-muted">Son değişiklik</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-database fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Audit Listesi -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Son Değişiklikler
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if audit_data %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tarih/Saat</th>
+                        <th>Modül</th>
+                        <th>Kayıt</th>
+                        <th>İşlem Yapan</th>
+                        <th>İşlem Türü</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in audit_data %}
+                    <tr>
+                        <td>
+                            <strong>{{ item.modified_at or '-' }}</strong>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if item.tablo == 'Üretim' %}success{% elif item.tablo == 'Personel' %}info{% elif item.tablo == 'Stok' %}warning{% elif item.tablo == 'Devam' %}primary{% else %}secondary{% endif %}">
+                                {{ item.tablo }}
+                            </span>
+                        </td>
+                        <td>
+                            <strong>{{ item.kayit }}</strong>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-user me-2"></i>
+                                <div>
+                                    <strong>{{ item.modified_by or item.created_by or 'Bilinmiyor' }}</strong>
+                                    {% if item.created_by and item.modified_by and item.created_by != item.modified_by %}
+                                    <br><small class="text-muted">Oluşturan: {{ item.created_by }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if item.created_by == item.modified_by %}
+                            <span class="badge bg-success">
+                                <i class="fas fa-plus me-1"></i>Oluşturuldu
+                            </span>
+                            {% else %}
+                            <span class="badge bg-warning">
+                                <i class="fas fa-edit me-1"></i>Güncellendi
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-history fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz audit kaydı bulunmuyor</h5>
+            <p class="text-muted">Sistem kullanılmaya başladığında audit kayıtları burada görünecektir.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if audit_data|length >= 50 %}
+<div class="alert alert-info mt-4">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Bilgi:</strong> Sadece son 50 değişiklik gösteriliyor. Daha fazla detay için sistem yöneticisine başvurun.
+</div>
+{% endif %}
+{% endblock %}

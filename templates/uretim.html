@@ -38,6 +38,7 @@
                         <th>Alan (m²)</th>
                         <th>Durum</th>
                         <th>Verim</th>
+                        <th>Audit Bilgisi</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
@@ -67,6 +68,19 @@
                             {% else %}
                                 <span class="text-muted">-</span>
                             {% endif %}
+                        </td>
+                        <td>
+                            <div class="small text-muted">
+                                {% if uretim.created_by %}
+                                <div><i class="fas fa-user-plus me-1"></i><strong>Oluşturan:</strong> {{ uretim.created_by }}</div>
+                                {% endif %}
+                                {% if uretim.modified_by %}
+                                <div><i class="fas fa-user-edit me-1"></i><strong>Son Değişiklik:</strong> {{ uretim.modified_by }}</div>
+                                {% endif %}
+                                {% if uretim.modified_at %}
+                                <div><i class="fas fa-clock me-1"></i>{{ uretim.modified_at }}</div>
+                                {% endif %}
+                            </div>
                         </td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary" 

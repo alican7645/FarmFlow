@@ -68,7 +68,10 @@ def init_db():
         beklenen_verim REAL,
         gercek_verim REAL,
         notlar TEXT,
-        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
 
     # Stok Tablosu
@@ -82,7 +85,10 @@ def init_db():
         depo TEXT,
         min_stok REAL DEFAULT 0,
         maliyet REAL DEFAULT 0,
-        notlar TEXT
+        notlar TEXT,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
 
     # Personel Tablosu (Çalışan Bilgileri)
@@ -95,7 +101,10 @@ def init_db():
         aktif INTEGER DEFAULT 1,
         telefon TEXT,
         notlar TEXT,
-        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
 
     # Devam/Yoklama Tablosu
@@ -108,6 +117,9 @@ def init_db():
         cikis_saati TEXT,
         notlar TEXT,
         olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (personel_id) REFERENCES personel (id),
         UNIQUE(personel_id, tarih)
     )''')
@@ -122,6 +134,9 @@ def init_db():
         durum TEXT DEFAULT 'Tamamlandı',
         notlar TEXT,
         olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (personel_id) REFERENCES personel (id)
     )''')
 
@@ -136,9 +151,35 @@ def init_db():
         teslim_edilen TEXT,
         notlar TEXT,
         olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (uretim_id) REFERENCES uretim (id)
     )''')
 
+    # Mevcut tablolara audit alanlarını ekle (migration)
+    try:
+        # Check if audit columns exist, if not add them
+        tables_to_migrate = ['uretim', 'stok', 'personel', 'devam', 'gorevler', 'hasat']
+        
+        for table in tables_to_migrate:
+            # Check if created_by column exists
+            c.execute(f"PRAGMA table_info({table})")
+            columns = [row[1] for row in c.fetchall()]
+            
+            if 'created_by' not in columns:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN created_by TEXT")
+            if 'modified_by' not in columns:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN modified_by TEXT")
+            if 'modified_at' not in columns:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN modified_at TEXT")
+                # Set initial values for existing records
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                c.execute(f"UPDATE {table} SET modified_at = ? WHERE modified_at IS NULL", (current_time,))
+                
+    except Exception as e:
+        print(f"Migration error: {e}")
+    
     conn.commit()
     conn.close()
 
@@ -146,6 +187,32 @@ def get_db_connection():
     conn = sqlite3.connect('sera.db')
     conn.row_factory = sqlite3.Row
     return conn
+
+# --- AUDIT HELPER FUNCTIONS ---
+def get_current_username():
+    """Get current user's username for audit tracking"""
+    if current_user.is_authenticated:
+        return current_user.kullanici_adi
+    return 'sistem'
+
+def add_audit_fields_for_create():
+    """Get audit fields for record creation"""
+    username = get_current_username()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return {
+        'created_by': username,
+        'modified_by': username,
+        'modified_at': timestamp
+    }
+
+def add_audit_fields_for_update():
+    """Get audit fields for record update"""
+    username = get_current_username()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return {
+        'modified_by': username,
+        'modified_at': timestamp
+    }
 
 # Initialize databases on startup
 init_db()
@@ -413,11 +480,13 @@ def uretim():
             if not sera_adi or not urun_adi or not ekim_tarihi:
                 flash('Sera adı, ürün adı ve ekim tarihi zorunludur!', 'error')
             else:
+                audit_fields = add_audit_fields_for_create()
                 conn.execute("""
                     INSERT INTO uretim (sera_adi, urun_adi, ekim_tarihi, hasat_tarihi, 
-                                      alan, beklenen_verim, notlar, durum) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (sera_adi, urun_adi, ekim_tarihi, hasat_tarihi, alan, beklenen_verim, notlar, "Ekim Yapıldı"))
+                                      alan, beklenen_verim, notlar, durum, created_by, modified_by, modified_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (sera_adi, urun_adi, ekim_tarihi, hasat_tarihi, alan, beklenen_verim, notlar, "Ekim Yapıldı",
+                      audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
                 conn.commit()
                 flash('Üretim kaydı başarıyla eklendi!', 'success')
                 return redirect(url_for('uretim'))
@@ -446,11 +515,12 @@ def uretim_guncelle(id):
         else:
             gercek_verim = None
             
+        audit_fields = add_audit_fields_for_update()
         conn.execute("""
             UPDATE uretim 
-            SET durum = ?, gercek_verim = ?, notlar = ?
+            SET durum = ?, gercek_verim = ?, notlar = ?, modified_by = ?, modified_at = ?
             WHERE id = ?
-        """, (durum, gercek_verim, notlar, id))
+        """, (durum, gercek_verim, notlar, audit_fields['modified_by'], audit_fields['modified_at'], id))
         conn.commit()
         flash('Üretim kaydı güncellendi!', 'success')
     except Exception as e:
@@ -491,29 +561,33 @@ def stok():
                     if yeni_miktar < 0:
                         flash('Yetersiz stok! Mevcut miktar: {}'.format(mevcut['miktar']), 'error')
                     else:
+                        audit_fields = add_audit_fields_for_update()
                         conn.execute(
-                            "UPDATE stok SET miktar = ? WHERE id = ?",
-                            (yeni_miktar, mevcut['id'])
+                            "UPDATE stok SET miktar = ?, modified_by = ?, modified_at = ? WHERE id = ?",
+                            (yeni_miktar, audit_fields['modified_by'], audit_fields['modified_at'], mevcut['id'])
                         )
                         conn.commit()
                         flash('Stok çıkarıldı!', 'success')
                 elif mevcut and islem_turu == 'ekle':
                     # Mevcut stoka ekleme
                     yeni_miktar = mevcut['miktar'] + miktar
+                    audit_fields = add_audit_fields_for_update()
                     conn.execute(
-                        "UPDATE stok SET miktar = ?, maliyet = ?, min_stok = ?, notlar = ? WHERE id = ?",
-                        (yeni_miktar, maliyet, min_stok, notlar, mevcut['id'])
+                        "UPDATE stok SET miktar = ?, maliyet = ?, min_stok = ?, notlar = ?, modified_by = ?, modified_at = ? WHERE id = ?",
+                        (yeni_miktar, maliyet, min_stok, notlar, audit_fields['modified_by'], audit_fields['modified_at'], mevcut['id'])
                     )
                     conn.commit()
                     flash('Stok güncellendi!', 'success')
                 else:
                     # Yeni stok kaydı
+                    audit_fields = add_audit_fields_for_create()
                     conn.execute("""
                         INSERT INTO stok (malzeme_adi, kategori, miktar, birim, tarih, 
-                                        depo, min_stok, maliyet, notlar) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        depo, min_stok, maliyet, notlar, created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (malzeme_adi, kategori, miktar, birim, datetime.now().strftime('%Y-%m-%d'),
-                          depo, min_stok, maliyet, notlar))
+                          depo, min_stok, maliyet, notlar, audit_fields['created_by'], 
+                          audit_fields['modified_by'], audit_fields['modified_at']))
                     conn.commit()
                     flash('Yeni stok kaydı eklendi!', 'success')
                 
@@ -555,10 +629,13 @@ def personel():
                 if not personel_adi:
                     flash('Personel adı zorunludur!', 'error')
                 else:
+                    audit_fields = add_audit_fields_for_create()
                     conn.execute("""
-                        INSERT INTO personel (personel_adi, pozisyon, aylik_maas, ise_baslama_tarihi, telefon, notlar) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (personel_adi, pozisyon, aylik_maas, ise_baslama_tarihi, telefon, notlar))
+                        INSERT INTO personel (personel_adi, pozisyon, aylik_maas, ise_baslama_tarihi, telefon, notlar,
+                                            created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (personel_adi, pozisyon, aylik_maas, ise_baslama_tarihi, telefon, notlar,
+                          audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
                     conn.commit()
                     flash('Personel kaydı başarıyla eklendi!', 'success')
                     return redirect(url_for('personel'))
@@ -579,10 +656,12 @@ def personel():
                 if not personel_id or not gorev or not tarih:
                     flash('Personel, görev ve tarih zorunludur!', 'error')
                 else:
+                    audit_fields = add_audit_fields_for_create()
                     conn.execute("""
-                        INSERT INTO gorevler (personel_id, gorev, tarih, sera_adi, notlar) 
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (personel_id, gorev, tarih, sera_adi, notlar))
+                        INSERT INTO gorevler (personel_id, gorev, tarih, sera_adi, notlar, created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (personel_id, gorev, tarih, sera_adi, notlar,
+                          audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
                     conn.commit()
                     flash('Görev kaydı başarıyla eklendi!', 'success')
                     return redirect(url_for('personel'))
@@ -652,17 +731,21 @@ def devam():
                 
                 if mevcut:
                     # Güncelle
+                    audit_fields = add_audit_fields_for_update()
                     conn.execute("""
                         UPDATE devam 
-                        SET durum = ?, giris_saati = ?, cikis_saati = ?, notlar = ?
+                        SET durum = ?, giris_saati = ?, cikis_saati = ?, notlar = ?, modified_by = ?, modified_at = ?
                         WHERE personel_id = ? AND tarih = ?
-                    """, (durum, giris_saati, cikis_saati, notlar, personel['id'], tarih))
+                    """, (durum, giris_saati, cikis_saati, notlar, audit_fields['modified_by'], audit_fields['modified_at'], personel['id'], tarih))
                 else:
                     # Yeni kayıt
+                    audit_fields = add_audit_fields_for_create()
                     conn.execute("""
-                        INSERT INTO devam (personel_id, tarih, durum, giris_saati, cikis_saati, notlar) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (personel['id'], tarih, durum, giris_saati, cikis_saati, notlar))
+                        INSERT INTO devam (personel_id, tarih, durum, giris_saati, cikis_saati, notlar,
+                                         created_by, modified_by, modified_at) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (personel['id'], tarih, durum, giris_saati, cikis_saati, notlar,
+                          audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
             
             conn.commit()
             flash('Devam durumu başarıyla kaydedildi!', 'success')
@@ -838,12 +921,14 @@ def hasat():
             if not parsil_alan or not hasat_eden or not hasat_tarihi:
                 flash('Hasat tarihi, parsel/alan ve hasat eden kişi zorunludur!', 'error')
             else:
+                audit_fields = add_audit_fields_for_create()
                 conn.execute("""
                     INSERT INTO hasat (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
-                                     hasat_eden, teslim_edilen, notlar) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                                     hasat_eden, teslim_edilen, notlar, created_by, modified_by, modified_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
-                      hasat_eden, teslim_edilen, notlar))
+                      hasat_eden, teslim_edilen, notlar, audit_fields['created_by'], 
+                      audit_fields['modified_by'], audit_fields['modified_at']))
                 conn.commit()
                 flash('Hasat kaydı başarıyla eklendi!', 'success')
                 return redirect(url_for('hasat'))
@@ -892,6 +977,80 @@ def hasat():
                          aktif_uretimler=aktif_uretimler,
                          bu_ay_toplam=bu_ay_toplam,
                          hasat_eden_istatistik=hasat_eden_istatistik)
+
+@app.route("/audit-trail")
+@login_required
+def audit_trail():
+    conn = get_db_connection()
+    
+    # Recent changes from all tables
+    audit_data = []
+    
+    # Get recent uretim changes
+    uretim_changes = conn.execute("""
+        SELECT 'Üretim' as tablo, sera_adi || ' - ' || urun_adi as kayit, 
+               created_by, modified_by, modified_at, id
+        FROM uretim 
+        WHERE modified_at IS NOT NULL 
+        ORDER BY modified_at DESC LIMIT 10
+    """).fetchall()
+    audit_data.extend(uretim_changes)
+    
+    # Get recent personel changes
+    personel_changes = conn.execute("""
+        SELECT 'Personel' as tablo, personel_adi as kayit,
+               created_by, modified_by, modified_at, id
+        FROM personel 
+        WHERE modified_at IS NOT NULL 
+        ORDER BY modified_at DESC LIMIT 10
+    """).fetchall()
+    audit_data.extend(personel_changes)
+    
+    # Get recent stok changes
+    stok_changes = conn.execute("""
+        SELECT 'Stok' as tablo, malzeme_adi as kayit,
+               created_by, modified_by, modified_at, id
+        FROM stok 
+        WHERE modified_at IS NOT NULL 
+        ORDER BY modified_at DESC LIMIT 10
+    """).fetchall()
+    audit_data.extend(stok_changes)
+    
+    # Get recent devam changes
+    devam_changes = conn.execute("""
+        SELECT 'Devam' as tablo, p.personel_adi || ' (' || d.tarih || ')' as kayit,
+               d.created_by, d.modified_by, d.modified_at, d.id
+        FROM devam d
+        LEFT JOIN personel p ON d.personel_id = p.id
+        WHERE d.modified_at IS NOT NULL 
+        ORDER BY d.modified_at DESC LIMIT 10
+    """).fetchall()
+    audit_data.extend(devam_changes)
+    
+    # Get recent hasat changes
+    hasat_changes = conn.execute("""
+        SELECT 'Hasat' as tablo, parsil_alan || ' (' || hasat_tarihi || ')' as kayit,
+               created_by, modified_by, modified_at, id
+        FROM hasat 
+        WHERE modified_at IS NOT NULL 
+        ORDER BY modified_at DESC LIMIT 10
+    """).fetchall()
+    audit_data.extend(hasat_changes)
+    
+    # Sort all changes by modification time
+    audit_data.sort(key=lambda x: x['modified_at'] or '', reverse=True)
+    audit_data = audit_data[:50]  # Limit to 50 most recent changes
+    
+    # Statistics
+    stats = {
+        'total_changes_today': len([a for a in audit_data if a['modified_at'] and a['modified_at'].startswith(datetime.now().strftime('%Y-%m-%d'))]),
+        'active_users_today': len(set([a['modified_by'] for a in audit_data if a['modified_by'] and a['modified_at'] and a['modified_at'].startswith(datetime.now().strftime('%Y-%m-%d'))])),
+        'total_records': len(audit_data)
+    }
+    
+    conn.close()
+    
+    return render_template('audit_trail.html', audit_data=audit_data, stats=stats)
 
 @app.route("/rapor")
 @login_required

@@ -129,6 +129,7 @@
                         <th>İşe Başlama</th>
                         <th>Telefon</th>
                         <th>Durum</th>
+                        <th>Audit Bilgisi</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
@@ -149,6 +150,19 @@
                             <span class="badge bg-{% if personel.aktif %}success{% else %}secondary{% endif %}">
                                 {% if personel.aktif %}Aktif{% else %}Pasif{% endif %}
                             </span>
+                        </td>
+                        <td>
+                            <div class="small text-muted">
+                                {% if personel.created_by %}
+                                <div><i class="fas fa-user-plus me-1"></i><strong>Oluşturan:</strong> {{ personel.created_by }}</div>
+                                {% endif %}
+                                {% if personel.modified_by %}
+                                <div><i class="fas fa-user-edit me-1"></i><strong>Son Değişiklik:</strong> {{ personel.modified_by }}</div>
+                                {% endif %}
+                                {% if personel.modified_at %}
+                                <div><i class="fas fa-clock me-1"></i>{{ personel.modified_at }}</div>
+                                {% endif %}
+                            </div>
                         </td>
                         <td>
                             <button class="btn btn-sm btn-outline-warning" title="Düzenle">
