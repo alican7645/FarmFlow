@@ -1191,12 +1191,29 @@ def sulama():
         GROUP BY sulama_turu
     """, (f"{bu_ay}%",)).fetchall()
     
+    # Get available fertilizers and chemicals from stock
+    available_fertilizers = conn.execute("""
+        SELECT DISTINCT malzeme_adi, miktar, birim
+        FROM stok 
+        WHERE kategori = 'Gübre' AND miktar > 0
+        ORDER BY malzeme_adi
+    """).fetchall()
+    
+    available_chemicals = conn.execute("""
+        SELECT DISTINCT malzeme_adi, miktar, birim
+        FROM stok 
+        WHERE kategori IN ('Pestisit', 'Kimyasal') AND miktar > 0
+        ORDER BY malzeme_adi
+    """).fetchall()
+    
     conn.close()
     
     return render_template('sulama.html', 
                          sulamalar=sulamalar,
                          bu_ay_sulama=bu_ay_sulama,
-                         gubre_istatistik=gubre_istatistik)
+                         gubre_istatistik=gubre_istatistik,
+                         available_fertilizers=available_fertilizers,
+                         available_chemicals=available_chemicals)
 
 @app.route("/gubreleme", methods=["GET", "POST"])
 @login_required
@@ -1272,12 +1289,21 @@ def gubreleme():
         ORDER BY toplam_miktar DESC
     """, (f"{bu_ay}%",)).fetchall()
     
+    # Get available fertilizers from stock
+    available_fertilizers = conn.execute("""
+        SELECT DISTINCT malzeme_adi, miktar, birim
+        FROM stok 
+        WHERE kategori = 'Gübre' AND miktar > 0
+        ORDER BY malzeme_adi
+    """).fetchall()
+    
     conn.close()
     
     return render_template('gubreleme.html', 
                          gubrelemeler=gubrelemeler,
                          bu_ay_gubre=bu_ay_gubre,
-                         gubre_turu_istatistik=gubre_turu_istatistik)
+                         gubre_turu_istatistik=gubre_turu_istatistik,
+                         available_fertilizers=available_fertilizers)
 
 @app.route("/audit-trail")
 @login_required

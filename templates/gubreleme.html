@@ -193,8 +193,25 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Gübre Adı *</label>
-                            <input type="text" name="gubre_adi" class="form-control" required 
-                                   placeholder="Örn: NPK 15-15-15, Urea, Organik Gübre">
+                            <select name="gubre_adi" class="form-select" required>
+                                <option value="">Gübre Seçin</option>
+                                {% for fertilizer in available_fertilizers %}
+                                <option value="{{ fertilizer.malzeme_adi }}">
+                                    {{ fertilizer.malzeme_adi }} 
+                                    <small>(Stok: {{ "%.1f"|format(fertilizer.miktar) }} {{ fertilizer.birim }})</small>
+                                </option>
+                                {% endfor %}
+                                {% if not available_fertilizers %}
+                                <option value="" disabled>Stokta gübre bulunmuyor</option>
+                                {% endif %}
+                            </select>
+                            <small class="form-text text-muted">
+                                {% if available_fertilizers %}
+                                Stokta bulunan gübreler gösteriliyor
+                                {% else %}
+                                <span class="text-warning">Önce stok modülünden gübre ekleyin</span>
+                                {% endif %}
+                            </small>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Gübre Miktarı (kg) *</label>

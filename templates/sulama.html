@@ -215,8 +215,33 @@
                     <div class="row" id="gubreKimyasalFields" style="display: none;">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Gübre/Kimyasal Adı</label>
-                            <input type="text" name="gubre_kimyasal" class="form-control" 
-                                   placeholder="Örn: NPK, Urea, Fungisit">
+                            <select name="gubre_kimyasal" class="form-control" id="gubreKimyasalSelect">
+                                <option value="">Seçin</option>
+                                <optgroup label="Gübreler">
+                                    {% for fertilizer in available_fertilizers %}
+                                    <option value="{{ fertilizer.malzeme_adi }}">
+                                        {{ fertilizer.malzeme_adi }} ({{ "%.1f"|format(fertilizer.miktar) }} {{ fertilizer.birim }})
+                                    </option>
+                                    {% endfor %}
+                                </optgroup>
+                                <optgroup label="Kimyasallar/Pestisitler">
+                                    {% for chemical in available_chemicals %}
+                                    <option value="{{ chemical.malzeme_adi }}">
+                                        {{ chemical.malzeme_adi }} ({{ "%.1f"|format(chemical.miktar) }} {{ chemical.birim }})
+                                    </option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% if not available_fertilizers and not available_chemicals %}
+                                <option value="" disabled>Stokta malzeme bulunmuyor</option>
+                                {% endif %}
+                            </select>
+                            <small class="form-text text-muted">
+                                {% if available_fertilizers or available_chemicals %}
+                                Stokta bulunan malzemeler gösteriliyor
+                                {% else %}
+                                <span class="text-warning">Önce stok modülünden malzeme ekleyin</span>
+                                {% endif %}
+                            </small>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Gübre/Kimyasal Miktarı (kg/L)</label>
