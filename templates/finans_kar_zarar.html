@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Kar/Zarar Analizi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-chart-pie me-2"></i>
+            Kar/Zarar Analizi
+        </h1>
+        <p class="text-muted">Detaylı karlılık analizi ve finansal performans raporu.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('finans') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Finans Ana Sayfa
+        </a>
+    </div>
+</div>
+
+<!-- Filtre Kartı -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-filter me-2"></i>Analiz Filtreleri
+        </h6>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Başlangıç Tarihi</label>
+                <input type="date" name="baslangic" class="form-control" value="{{ baslangic }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Bitiş Tarihi</label>
+                <input type="date" name="bitis" class="form-control" value="{{ bitis }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Sera Filtresi</label>
+                <select name="sera" class="form-select">
+                    <option value="">Tüm Seralar</option>
+                    {% for sera in sera_listesi %}
+                    <option value="{{ sera.parsil_alan }}" {% if sera_filter == sera.parsil_alan %}selected{% endif %}>
+                        {{ sera.parsil_alan }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-chart-pie me-2"></i>Analiz Et
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Özet Kartları -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Toplam Gelir</h6>
+                        <h4 class="mb-0">{{ "{:,.0f}".format(gelir_data.toplam_gelir) }} ₺</h4>
+                        <small class="text-muted">{{ gelir_data.fatura_sayisi }} fatura</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-arrow-up fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-danger">Toplam Gider</h6>
+                        <h4 class="mb-0">{{ "{:,.0f}".format(gider_data.toplam_gider) }} ₺</h4>
+                        <small class="text-muted">{{ gider_data.maliyet_sayisi }} kayıt</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-arrow-down fa-2x text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-{% if net_kar_zarar >= 0 %}info{% else %}warning{% endif %}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-{% if net_kar_zarar >= 0 %}info{% else %}warning{% endif %}">Net Kar/Zarar</h6>
+                        <h4 class="mb-0 {% if net_kar_zarar < 0 %}text-danger{% else %}text-success{% endif %}">
+                            {{ "{:,.0f}".format(net_kar_zarar) }} ₺
+                        </h4>
+                        <small class="text-muted">{{ "%.1f"|format(karlillik_orani) }}% karlılık</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-balance-scale fa-2x text-{% if net_kar_zarar >= 0 %}info{% else %}warning{% endif %}"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-primary">Toplam Hasat</h6>
+                        <h4 class="mb-0">{{ "%.0f"|format(gelir_data.toplam_kg) }} kg</h4>
+                        <small class="text-muted">{{ "%.2f"|format(kg_basina_kar) }} ₺/kg kar</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-weight fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detay Analizler -->
+<div class="row mb-4">
+    <!-- Kg Bazında Analiz -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-weight me-2"></i>Kg Bazında Analiz
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="text-center mb-3">
+                            <h5 class="text-success">{{ "%.2f"|format(kg_basina_gelir) }} ₺</h5>
+                            <small class="text-muted">Kg Başına Gelir</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center mb-3">
+                            <h5 class="text-danger">{{ "%.2f"|format(kg_basina_maliyet) }} ₺</h5>
+                            <small class="text-muted">Kg Başına Maliyet</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <h4 class="{% if kg_basina_kar >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ "%.2f"|format(kg_basina_kar) }} ₺
+                    </h4>
+                    <small class="text-muted">Kg Başına Net Kar</small>
+                </div>
+                <div class="progress mt-3">
+                    {% set gelir_percent = (kg_basina_gelir / (kg_basina_gelir + kg_basina_maliyet) * 100) if (kg_basina_gelir + kg_basina_maliyet) > 0 else 0 %}
+                    <div class="progress-bar bg-success" style="width: {{ gelir_percent }}%"></div>
+                    <div class="progress-bar bg-danger" style="width: {{ 100 - gelir_percent }}%"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                    <small class="text-success">Gelir: {{ "%.1f"|format(gelir_percent) }}%</small>
+                    <small class="text-danger">Maliyet: {{ "%.1f"|format(100 - gelir_percent) }}%</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maliyet Breakdown -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>Maliyet Dağılımı
+                </h6>
+            </div>
+            <div class="card-body p-0">
+                {% if maliyet_breakdown %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for maliyet in maliyet_breakdown %}
+                            {% set maliyet_oran = (maliyet.toplam / gider_data.toplam_gider * 100) if gider_data.toplam_gider > 0 else 0 %}
+                            <tr>
+                                <td>
+                                    <span class="badge bg-{% if maliyet.maliyet_turu == 'Gübre' %}success{% elif maliyet.maliyet_turu == 'Kutu' %}info{% elif maliyet.maliyet_turu == 'İşçilik' %}primary{% else %}secondary{% endif %}">
+                                        {{ maliyet.maliyet_turu }}
+                                    </span>
+                                </td>
+                                <td>{{ maliyet.adet }} kayıt</td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-{% if maliyet.maliyet_turu == 'Gübre' %}success{% elif maliyet.maliyet_turu == 'Kutu' %}info{% elif maliyet.maliyet_turu == 'İşçilik' %}primary{% else %}secondary{% endif %}" 
+                                             style="width: {{ maliyet_oran }}%">
+                                            {{ "%.1f"|format(maliyet_oran) }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-end"><strong>{{ "{:,.0f}".format(maliyet.toplam) }} ₺</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <small class="text-muted">Seçilen dönemde maliyet kaydı bulunamadı</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Firma Bazında Gelir Analizi -->
+{% if firma_analizi %}
+<div class="card">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-building me-2"></i>Firma Bazında Gelir Analizi
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Firma Adı</th>
+                        <th>Teslimat Sayısı</th>
+                        <th>Toplam Kg</th>
+                        <th>Ortalama Fiyat</th>
+                        <th>Toplam Gelir</th>
+                        <th>Gelir Payı</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for firma in firma_analizi %}
+                    {% set gelir_payi = (firma.toplam_gelir / gelir_data.toplam_gelir * 100) if gelir_data.toplam_gelir > 0 else 0 %}
+                    <tr>
+                        <td><strong>{{ firma.firma_adi }}</strong></td>
+                        <td>{{ firma.teslimat_sayisi }}</td>
+                        <td>{{ "%.0f"|format(firma.toplam_kg) }} kg</td>
+                        <td>{{ "%.2f"|format(firma.ortalama_fiyat) }} ₺/kg</td>
+                        <td><strong class="text-success">{{ "{:,.0f}".format(firma.toplam_gelir) }} ₺</strong></td>
+                        <td>
+                            <div class="progress" style="height: 25px;">
+                                <div class="progress-bar bg-success" style="width: {{ gelir_payi }}%">
+                                    {{ "%.1f"|format(gelir_payi) }}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not gelir_data.fatura_sayisi and not gider_data.maliyet_sayisi %}
+<div class="alert alert-info text-center">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Bilgi:</strong> Seçilen tarih aralığında herhangi bir gelir veya gider kaydı bulunamadı.
+    <br>Analiz yapabilmek için önce faturalar fiyatlandırılmalı ve maliyet kayıtları eklenmelidir.
+</div>
+{% endif %}
+
+{% endblock %}

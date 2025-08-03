@@ -200,10 +200,79 @@ def init_db():
         FOREIGN KEY (uretim_id) REFERENCES uretim (id)
     )''')
 
+    # Faturalar Tablosu (Finans Modülü)
+    c.execute('''CREATE TABLE IF NOT EXISTS faturalar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hasat_id INTEGER NOT NULL,
+        firma_adi TEXT NOT NULL,
+        hasat_tarihi TEXT NOT NULL,
+        miktar REAL NOT NULL, -- kg
+        birim_fiyat REAL, -- TL/kg (finans ekibi tarafından belirlenecek)
+        toplam_tutar REAL, -- miktar * birim_fiyat
+        durum TEXT DEFAULT 'Beklemede', -- 'Beklemede', 'Fiyatlandırıldı', 'Faturalandı', 'Tahsil Edildi'
+        fiyat_belirleme_tarihi TEXT,
+        fatura_tarihi TEXT,
+        tahsil_tarihi TEXT,
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (hasat_id) REFERENCES hasat (id)
+    )''')
+
+    # Maliyetler Tablosu (Operasyon Giderleri Takibi)
+    c.execute('''CREATE TABLE IF NOT EXISTS maliyetler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        maliyet_turu TEXT NOT NULL, -- 'Gübre', 'Kutu', 'Palet', 'İşçilik', 'Elektrik', 'Su', 'Diğer'
+        tarih TEXT NOT NULL,
+        aciklama TEXT NOT NULL,
+        miktar REAL, -- Miktar (kg, adet, saat vs.)
+        birim TEXT, -- kg, adet, saat, kWh vs.
+        birim_fiyat REAL NOT NULL, -- TL/birim
+        toplam_tutar REAL NOT NULL, -- miktar * birim_fiyat
+        sera_adi TEXT, -- Hangi sera ile ilişkili (opsiyonel)
+        uretim_id INTEGER, -- Hangi üretim dönemine ait (opsiyonel)
+        hasat_id INTEGER, -- Hangi hasatla ilişkili (opsiyonel)
+        tedarikci TEXT, -- Tedarikci bilgisi
+        fatura_no TEXT, -- Fatura numarası
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (uretim_id) REFERENCES uretim (id),
+        FOREIGN KEY (hasat_id) REFERENCES hasat (id)
+    )''')
+
+    # Kar/Zarar Tablosu (Hesaplanan Karlılık)
+    c.execute('''CREATE TABLE IF NOT EXISTS kar_zarar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hesaplama_tarihi TEXT NOT NULL,
+        donem_baslangic TEXT NOT NULL, -- Dönem başlangıç tarihi
+        donem_bitis TEXT NOT NULL, -- Dönem bitiş tarihi
+        sera_adi TEXT, -- Hangi sera (opsiyonel, tüm seralar için boş bırakılabilir)
+        uretim_id INTEGER, -- Hangi üretim dönemine ait (opsiyonel)
+        toplam_gelir REAL NOT NULL, -- Faturalardan gelen toplam gelir
+        toplam_gider REAL NOT NULL, -- Maliyetlerden toplam gider
+        net_kar_zarar REAL NOT NULL, -- toplam_gelir - toplam_gider
+        karlillik_orani REAL, -- net_kar_zarar / toplam_gelir * 100
+        hasat_miktari REAL, -- Toplam hasat miktarı (kg)
+        kg_basina_maliyet REAL, -- toplam_gider / hasat_miktari
+        kg_basina_gelir REAL, -- toplam_gelir / hasat_miktari
+        kg_basina_kar REAL, -- net_kar_zarar / hasat_miktari
+        notlar TEXT,
+        olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        modified_by TEXT,
+        modified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (uretim_id) REFERENCES uretim (id)
+    )''')
+
     # Mevcut tablolara audit alanlarını ekle (migration)
     try:
         # Check if audit columns exist, if not add them
-        tables_to_migrate = ['uretim', 'stok', 'personel', 'devam', 'gorevler', 'hasat', 'sulama', 'gubreleme']
+        tables_to_migrate = ['uretim', 'stok', 'personel', 'devam', 'gorevler', 'hasat', 'sulama', 'gubreleme', 'faturalar', 'maliyetler', 'kar_zarar']
         
         for table in tables_to_migrate:
             # Check if created_by column exists
@@ -1044,7 +1113,9 @@ def hasat():
                 
                 if stock_success:
                     audit_fields = add_audit_fields_for_create()
-                    conn.execute("""
+                    
+                    # Insert hasat record
+                    hasat_cursor = conn.execute("""
                         INSERT INTO hasat (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
                                          hasat_eden, teslim_edilen, kutu_sayisi, palet_sayisi, notlar, 
                                          created_by, modified_by, modified_at) 
@@ -1052,9 +1123,27 @@ def hasat():
                     """, (uretim_id, hasat_tarihi, parsil_alan, hasat_miktari, 
                           hasat_eden, teslim_edilen, kutu_sayisi, palet_sayisi, notlar, 
                           audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+                    
+                    hasat_id = hasat_cursor.lastrowid
+                    
+                    # Otomatik fatura kaydı oluştur (eğer teslim edilen firma belirtilmişse)
+                    if teslim_edilen:
+                        try:
+                            conn.execute("""
+                                INSERT INTO faturalar (hasat_id, firma_adi, hasat_tarihi, miktar, 
+                                                     durum, created_by, modified_by, modified_at) 
+                                VALUES (?, ?, ?, ?, 'Beklemede', ?, ?, ?)
+                            """, (hasat_id, teslim_edilen, hasat_tarihi, hasat_miktari,
+                                  audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+                        except Exception as e:
+                            # Fatura kaydı başarısız olsa da hasat kaydı devam etsin
+                            print(f"Fatura oluşturma hatası: {e}")
+                    
                     conn.commit()
                     
                     success_msg = 'Hasat kaydı başarıyla eklendi!'
+                    if teslim_edilen:
+                        success_msg += f' Finans modülünde "{teslim_edilen}" için fatura kaydı oluşturuldu.'
                     if stock_messages:
                         success_msg += ' Stok güncellemeleri: ' + ', '.join(stock_messages)
                     flash(success_msg, 'success')
@@ -1528,6 +1617,368 @@ def rapor():
                          uretim_raporu=uretim_raporu,
                          stok_raporu=stok_raporu,
                          personel_raporu=personel_raporu)
+
+# FINANS VE KAR/ZARAR MODÜLÜ
+@app.route("/finans")
+@login_required
+def finans():
+    conn = get_db_connection()
+    
+    # İstatistikler
+    stats = {}
+    
+    # Bekleyen faturalar
+    stats['bekleyen_faturalar'] = conn.execute("""
+        SELECT COUNT(*) FROM faturalar WHERE durum = 'Beklemede'
+    """).fetchone()[0]
+    
+    # Bu ay toplam gelir (fiyatlandırılmış faturalar)
+    bu_ay = datetime.now().strftime('%Y-%m')
+    stats['bu_ay_gelir'] = conn.execute("""
+        SELECT COALESCE(SUM(toplam_tutar), 0) FROM faturalar 
+        WHERE hasat_tarihi LIKE ? AND birim_fiyat IS NOT NULL
+    """, (f"{bu_ay}%",)).fetchone()[0]
+    
+    # Bu ay toplam gider
+    stats['bu_ay_gider'] = conn.execute("""
+        SELECT COALESCE(SUM(toplam_tutar), 0) FROM maliyetler 
+        WHERE tarih LIKE ?
+    """, (f"{bu_ay}%",)).fetchone()[0]
+    
+    # Bu ay kar/zarar
+    stats['bu_ay_kar_zarar'] = stats['bu_ay_gelir'] - stats['bu_ay_gider']
+    
+    # Son faturalar
+    son_faturalar = conn.execute("""
+        SELECT f.*, h.parsil_alan, h.hasat_eden
+        FROM faturalar f
+        LEFT JOIN hasat h ON f.hasat_id = h.id
+        ORDER BY f.olusturma_tarihi DESC
+        LIMIT 10
+    """).fetchall()
+    
+    # Son maliyetler
+    son_maliyetler = conn.execute("""
+        SELECT * FROM maliyetler 
+        ORDER BY olusturma_tarihi DESC
+        LIMIT 10
+    """).fetchall()
+    
+    conn.close()
+    
+    return render_template('finans.html', 
+                         stats=stats,
+                         son_faturalar=son_faturalar,
+                         son_maliyetler=son_maliyetler)
+
+@app.route("/finans/faturalar", methods=["GET", "POST"])
+@login_required
+def finans_faturalar():
+    conn = get_db_connection()
+    
+    if request.method == "POST":
+        action = request.form.get('action')
+        
+        if action == 'set_price':
+            try:
+                fatura_id = int(request.form['fatura_id'])
+                birim_fiyat = float(request.form['birim_fiyat'])
+                notlar = request.form.get('notlar', '').strip()
+                
+                # Fatura bilgilerini al
+                fatura = conn.execute("""
+                    SELECT * FROM faturalar WHERE id = ?
+                """, (fatura_id,)).fetchone()
+                
+                if fatura:
+                    toplam_tutar = fatura['miktar'] * birim_fiyat
+                    audit_fields = add_audit_fields_for_update()
+                    
+                    conn.execute("""
+                        UPDATE faturalar 
+                        SET birim_fiyat = ?, toplam_tutar = ?, durum = 'Fiyatlandırıldı',
+                            fiyat_belirleme_tarihi = ?, notlar = ?, 
+                            modified_by = ?, modified_at = ?
+                        WHERE id = ?
+                    """, (birim_fiyat, toplam_tutar, datetime.now().strftime('%Y-%m-%d'),
+                          notlar, audit_fields['modified_by'], audit_fields['modified_at'], fatura_id))
+                    
+                    conn.commit()
+                    flash(f'Fatura fiyatlandırıldı: {birim_fiyat} TL/kg', 'success')
+                else:
+                    flash('Fatura bulunamadı!', 'error')
+                    
+            except (ValueError, KeyError):
+                flash('Lütfen geçerli bir fiyat girin!', 'error')
+            except Exception as e:
+                flash(f'Bir hata oluştu: {str(e)}', 'error')
+        
+        elif action == 'update_status':
+            try:
+                fatura_id = int(request.form['fatura_id'])
+                yeni_durum = request.form['yeni_durum']
+                
+                audit_fields = add_audit_fields_for_update()
+                update_data = [yeni_durum, audit_fields['modified_by'], audit_fields['modified_at'], fatura_id]
+                
+                if yeni_durum == 'Faturalandı':
+                    fatura_tarihi = datetime.now().strftime('%Y-%m-%d')
+                    conn.execute("""
+                        UPDATE faturalar 
+                        SET durum = ?, fatura_tarihi = ?, modified_by = ?, modified_at = ?
+                        WHERE id = ?
+                    """, [yeni_durum, fatura_tarihi] + update_data[1:])
+                elif yeni_durum == 'Tahsil Edildi':
+                    tahsil_tarihi = datetime.now().strftime('%Y-%m-%d')
+                    conn.execute("""
+                        UPDATE faturalar 
+                        SET durum = ?, tahsil_tarihi = ?, modified_by = ?, modified_at = ?
+                        WHERE id = ?
+                    """, [yeni_durum, tahsil_tarihi] + update_data[1:])
+                else:
+                    conn.execute("""
+                        UPDATE faturalar 
+                        SET durum = ?, modified_by = ?, modified_at = ?
+                        WHERE id = ?
+                    """, update_data)
+                
+                conn.commit()
+                flash(f'Fatura durumu güncellendi: {yeni_durum}', 'success')
+                
+            except (ValueError, KeyError):
+                flash('Geçersiz fatura bilgisi!', 'error')
+            except Exception as e:
+                flash(f'Bir hata oluştu: {str(e)}', 'error')
+        
+        return redirect(url_for('finans_faturalar'))
+    
+    # Fatura listesi
+    faturalar = conn.execute("""
+        SELECT f.*, h.parsil_alan, h.hasat_eden, h.uretim_id,
+               u.sera_adi, u.urun_adi
+        FROM faturalar f
+        LEFT JOIN hasat h ON f.hasat_id = h.id
+        LEFT JOIN uretim u ON h.uretim_id = u.id
+        ORDER BY f.olusturma_tarihi DESC
+    """).fetchall()
+    
+    # İstatistikler
+    toplam_bekleyen = conn.execute("""
+        SELECT COUNT(*), COALESCE(SUM(miktar), 0) 
+        FROM faturalar WHERE durum = 'Beklemede'
+    """).fetchone()
+    
+    toplam_fiyatlandirilmis = conn.execute("""
+        SELECT COUNT(*), COALESCE(SUM(toplam_tutar), 0) 
+        FROM faturalar WHERE durum IN ('Fiyatlandırıldı', 'Faturalandı', 'Tahsil Edildi')
+    """).fetchone()
+    
+    conn.close()
+    
+    return render_template('finans_faturalar.html', 
+                         faturalar=faturalar,
+                         toplam_bekleyen=toplam_bekleyen,
+                         toplam_fiyatlandirilmis=toplam_fiyatlandirilmis)
+
+@app.route("/finans/maliyetler", methods=["GET", "POST"])
+@login_required
+def finans_maliyetler():
+    conn = get_db_connection()
+    
+    if request.method == "POST":
+        try:
+            maliyet_turu = request.form['maliyet_turu'].strip()
+            tarih = request.form['tarih']
+            aciklama = request.form['aciklama'].strip()
+            miktar = float(request.form.get('miktar', 0) or 0)
+            birim = request.form.get('birim', '').strip()
+            birim_fiyat = float(request.form['birim_fiyat'])
+            toplam_tutar = miktar * birim_fiyat if miktar > 0 else birim_fiyat
+            sera_adi = request.form.get('sera_adi', '').strip()
+            uretim_id = request.form.get('uretim_id') or None
+            tedarikci = request.form.get('tedarikci', '').strip()
+            fatura_no = request.form.get('fatura_no', '').strip()
+            notlar = request.form.get('notlar', '').strip()
+            
+            if not maliyet_turu or not aciklama or not tarih:
+                flash('Maliyet türü, açıklama ve tarih zorunludur!', 'error')
+            else:
+                audit_fields = add_audit_fields_for_create()
+                conn.execute("""
+                    INSERT INTO maliyetler (maliyet_turu, tarih, aciklama, miktar, birim, 
+                                          birim_fiyat, toplam_tutar, sera_adi, uretim_id, 
+                                          tedarikci, fatura_no, notlar, created_by, modified_by, modified_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (maliyet_turu, tarih, aciklama, miktar, birim, birim_fiyat, 
+                      toplam_tutar, sera_adi, uretim_id, tedarikci, fatura_no, notlar,
+                      audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+                conn.commit()
+                flash('Maliyet kaydı başarıyla eklendi!', 'success')
+                return redirect(url_for('finans_maliyetler'))
+                
+        except ValueError:
+            flash('Lütfen sayısal değerleri doğru formatta girin!', 'error')
+        except Exception as e:
+            flash(f'Bir hata oluştu: {str(e)}', 'error')
+    
+    # Maliyet kayıtları
+    maliyetler = conn.execute("""
+        SELECT m.*, u.sera_adi as uretim_sera_adi, u.urun_adi
+        FROM maliyetler m
+        LEFT JOIN uretim u ON m.uretim_id = u.id
+        ORDER BY m.tarih DESC, m.olusturma_tarihi DESC
+    """).fetchall()
+    
+    # Aktif üretimler
+    aktif_uretimler = conn.execute("""
+        SELECT id, sera_adi, urun_adi, ekim_tarihi
+        FROM uretim 
+        WHERE durum != 'Hasat Edildi' 
+        ORDER BY sera_adi, urun_adi
+    """).fetchall()
+    
+    # İstatistikler
+    bu_ay = datetime.now().strftime('%Y-%m')
+    bu_ay_maliyetler = conn.execute("""
+        SELECT maliyet_turu, COUNT(*) as adet, SUM(toplam_tutar) as toplam
+        FROM maliyetler 
+        WHERE tarih LIKE ?
+        GROUP BY maliyet_turu
+        ORDER BY toplam DESC
+    """, (f"{bu_ay}%",)).fetchall()
+    
+    toplam_maliyet = conn.execute("""
+        SELECT COALESCE(SUM(toplam_tutar), 0) FROM maliyetler 
+        WHERE tarih LIKE ?
+    """, (f"{bu_ay}%",)).fetchone()[0]
+    
+    conn.close()
+    
+    return render_template('finans_maliyetler.html', 
+                         maliyetler=maliyetler,
+                         aktif_uretimler=aktif_uretimler,
+                         bu_ay_maliyetler=bu_ay_maliyetler,
+                         toplam_maliyet=toplam_maliyet)
+
+@app.route("/finans/kar-zarar")
+@login_required  
+def finans_kar_zarar():
+    conn = get_db_connection()
+    
+    # Tarih aralığı parametreleri
+    baslangic = request.args.get('baslangic', datetime.now().replace(day=1).strftime('%Y-%m-%d'))
+    bitis = request.args.get('bitis', datetime.now().strftime('%Y-%m-%d'))
+    sera_filter = request.args.get('sera', '')
+    
+    # Gelir hesaplama (fiyatlandırılmış faturalar)
+    gelir_query = """
+        SELECT COALESCE(SUM(f.toplam_tutar), 0) as toplam_gelir,
+               COUNT(*) as fatura_sayisi,
+               COALESCE(SUM(f.miktar), 0) as toplam_kg
+        FROM faturalar f
+        LEFT JOIN hasat h ON f.hasat_id = h.id
+        WHERE f.hasat_tarihi BETWEEN ? AND ?
+        AND f.birim_fiyat IS NOT NULL
+    """
+    
+    gelir_params = [baslangic, bitis]
+    if sera_filter:
+        gelir_query += " AND h.parsil_alan LIKE ?"
+        gelir_params.append(f"%{sera_filter}%")
+    
+    gelir_data = conn.execute(gelir_query, gelir_params).fetchone()
+    
+    # Gider hesaplama
+    gider_query = """
+        SELECT COALESCE(SUM(toplam_tutar), 0) as toplam_gider,
+               COUNT(*) as maliyet_sayisi
+        FROM maliyetler
+        WHERE tarih BETWEEN ? AND ?
+    """
+    
+    gider_params = [baslangic, bitis]
+    if sera_filter:
+        gider_query += " AND sera_adi LIKE ?"
+        gider_params.append(f"%{sera_filter}%")
+    
+    gider_data = conn.execute(gider_query, gider_params).fetchone()
+    
+    # Maliyet türlerine göre breakdown
+    maliyet_breakdown = conn.execute("""
+        SELECT maliyet_turu, COUNT(*) as adet, SUM(toplam_tutar) as toplam
+        FROM maliyetler
+        WHERE tarih BETWEEN ? AND ?
+        {} 
+        GROUP BY maliyet_turu
+        ORDER BY toplam DESC
+    """.format("AND sera_adi LIKE ?" if sera_filter else ""), 
+    gider_params).fetchall()
+    
+    # Firma bazında gelir analizi
+    firma_analizi = conn.execute("""
+        SELECT f.firma_adi, 
+               COUNT(*) as teslimat_sayisi,
+               SUM(f.miktar) as toplam_kg,
+               AVG(f.birim_fiyat) as ortalama_fiyat,
+               SUM(f.toplam_tutar) as toplam_gelir
+        FROM faturalar f
+        LEFT JOIN hasat h ON f.hasat_id = h.id
+        WHERE f.hasat_tarihi BETWEEN ? AND ?
+        AND f.birim_fiyat IS NOT NULL
+        {}
+        GROUP BY f.firma_adi
+        ORDER BY toplam_gelir DESC
+    """.format("AND h.parsil_alan LIKE ?" if sera_filter else ""), 
+    gelir_params).fetchall()
+    
+    # Kar/zarar hesaplama
+    net_kar_zarar = gelir_data['toplam_gelir'] - gider_data['toplam_gider']
+    karlillik_orani = (net_kar_zarar / gelir_data['toplam_gelir'] * 100) if gelir_data['toplam_gelir'] > 0 else 0
+    kg_basina_gelir = gelir_data['toplam_gelir'] / gelir_data['toplam_kg'] if gelir_data['toplam_kg'] > 0 else 0
+    kg_basina_maliyet = gider_data['toplam_gider'] / gelir_data['toplam_kg'] if gelir_data['toplam_kg'] > 0 else 0
+    kg_basina_kar = kg_basina_gelir - kg_basina_maliyet
+    
+    # Sonuçları kar_zarar tablosuna kaydet
+    try:
+        audit_fields = add_audit_fields_for_create()
+        conn.execute("""
+            INSERT INTO kar_zarar (hesaplama_tarihi, donem_baslangic, donem_bitis, sera_adi,
+                                 toplam_gelir, toplam_gider, net_kar_zarar, karlillik_orani,
+                                 hasat_miktari, kg_basina_maliyet, kg_basina_gelir, kg_basina_kar,
+                                 created_by, modified_by, modified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (datetime.now().strftime('%Y-%m-%d'), baslangic, bitis, sera_filter or None,
+              gelir_data['toplam_gelir'], gider_data['toplam_gider'], net_kar_zarar, karlillik_orani,
+              gelir_data['toplam_kg'], kg_basina_maliyet, kg_basina_gelir, kg_basina_kar,
+              audit_fields['created_by'], audit_fields['modified_by'], audit_fields['modified_at']))
+        conn.commit()
+    except Exception as e:
+        # Hesaplama kaydı başarısız olsa da rapor gösterilsin
+        print(f"Kar/zarar kayıt hatası: {e}")
+    
+    # Sera listesi (filtre için)
+    sera_listesi = conn.execute("""
+        SELECT DISTINCT parsil_alan FROM hasat 
+        WHERE parsil_alan IS NOT NULL AND parsil_alan != ''
+        ORDER BY parsil_alan
+    """).fetchall()
+    
+    conn.close()
+    
+    return render_template('finans_kar_zarar.html',
+                         gelir_data=gelir_data,
+                         gider_data=gider_data,
+                         net_kar_zarar=net_kar_zarar,
+                         karlillik_orani=karlillik_orani,
+                         kg_basina_gelir=kg_basina_gelir,
+                         kg_basina_maliyet=kg_basina_maliyet,
+                         kg_basina_kar=kg_basina_kar,
+                         maliyet_breakdown=maliyet_breakdown,
+                         firma_analizi=firma_analizi,
+                         sera_listesi=sera_listesi,
+                         baslangic=baslangic,
+                         bitis=bitis,
+                         sera_filter=sera_filter)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

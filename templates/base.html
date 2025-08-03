@@ -61,6 +61,26 @@
                         </a>
                     </li>
                     <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['finans', 'finans_faturalar', 'finans_maliyetler', 'finans_kar_zarar'] %}active{% endif %}" 
+                           href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-chart-line me-1"></i>Finans
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('finans') }}">
+                                <i class="fas fa-chart-line me-2"></i>Finans Ana Sayfa
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('finans_faturalar') }}">
+                                <i class="fas fa-file-invoice me-2"></i>Fatura Yönetimi
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('finans_maliyetler') }}">
+                                <i class="fas fa-receipt me-2"></i>Maliyet Takibi
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('finans_kar_zarar') }}">
+                                <i class="fas fa-chart-pie me-2"></i>Kar/Zarar Analizi
+                            </a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.endpoint in ['personel', 'devam'] %}active{% endif %}" 
                            href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-users me-1"></i>Personel

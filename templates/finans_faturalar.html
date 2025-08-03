@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Fatura Yönetimi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-file-invoice me-2"></i>
+            Fatura Yönetimi
+        </h1>
+        <p class="text-muted">Hasat teslimatlarının fatura yönetimi ve fiyatlandırma işlemleri.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('finans') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Finans Ana Sayfa
+            </a>
+            <a href="{{ url_for('hasat') }}" class="btn btn-success">
+                <i class="fas fa-cut me-2"></i>Hasat Modülü
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- İstatistik Kartları -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card border-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-warning">Bekleyen Faturalar</h6>
+                        <h4 class="mb-0">{{ toplam_bekleyen[0] }}</h4>
+                        <small class="text-muted">{{ "%.1f"|format(toplam_bekleyen[1]) }} kg</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-clock fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-success">Fiyatlandırılmış</h6>
+                        <h4 class="mb-0">{{ toplam_fiyatlandirilmis[0] }}</h4>
+                        <small class="text-muted">{{ "{:,.0f}".format(toplam_fiyatlandirilmis[1]) }} ₺</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-check-circle fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fatura Listesi -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Fatura Listesi
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if faturalar %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Hasat Tarihi</th>
+                        <th>Firma Adı</th>
+                        <th>Üretim/Parsel</th>
+                        <th>Miktar (kg)</th>
+                        <th>Birim Fiyat</th>
+                        <th>Toplam Tutar</th>
+                        <th>Durum</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fatura in faturalar %}
+                    <tr>
+                        <td><strong>{{ fatura.hasat_tarihi }}</strong></td>
+                        <td>
+                            <strong>{{ fatura.firma_adi }}</strong>
+                            {% if fatura.hasat_eden %}
+                            <br><small class="text-muted">Hasat: {{ fatura.hasat_eden }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if fatura.sera_adi and fatura.urun_adi %}
+                            <strong>{{ fatura.sera_adi }}</strong>
+                            <br><small class="text-muted">{{ fatura.urun_adi }}</small>
+                            {% endif %}
+                            {% if fatura.parsil_alan %}
+                            <br><small class="text-info">{{ fatura.parsil_alan }}</small>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ "%.1f"|format(fatura.miktar) }} kg</strong></td>
+                        <td>
+                            {% if fatura.birim_fiyat %}
+                            <strong>{{ "%.2f"|format(fatura.birim_fiyat) }} ₺/kg</strong>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if fatura.toplam_tutar %}
+                            <strong class="text-success">{{ "{:,.0f}".format(fatura.toplam_tutar) }} ₺</strong>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if fatura.durum == 'Beklemede' %}warning{% elif fatura.durum == 'Fiyatlandırıldı' %}info{% elif fatura.durum == 'Faturalandı' %}primary{% else %}success{% endif %}">
+                                {{ fatura.durum }}
+                            </span>
+                            {% if fatura.fiyat_belirleme_tarihi %}
+                            <br><small class="text-muted">{{ fatura.fiyat_belirleme_tarihi }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                {% if fatura.durum == 'Beklemede' %}
+                                <button class="btn btn-outline-primary" title="Fiyatlandır" 
+                                        data-bs-toggle="modal" data-bs-target="#fiyatModal{{ fatura.id }}">
+                                    <i class="fas fa-tag"></i>
+                                </button>
+                                {% endif %}
+                                {% if fatura.durum in ['Fiyatlandırıldı', 'Faturalandı'] %}
+                                <button class="btn btn-outline-info" title="Durum Güncelle" 
+                                        data-bs-toggle="modal" data-bs-target="#durumModal{{ fatura.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-file-invoice fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz fatura kaydı bulunmuyor</h5>
+            <p class="text-muted">Hasat modülünde teslim edilen firma belirtildiğinde otomatik fatura kayıtları oluşur.</p>
+            <a href="{{ url_for('hasat') }}" class="btn btn-success">
+                <i class="fas fa-cut me-2"></i>Hasat Modülüne Git
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Fiyat Belirleme Modalleri -->
+{% for fatura in faturalar %}
+{% if fatura.durum == 'Beklemede' %}
+<div class="modal fade" id="fiyatModal{{ fatura.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <input type="hidden" name="action" value="set_price">
+                <input type="hidden" name="fatura_id" value="{{ fatura.id }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-tag me-2"></i>Fiyat Belirleme
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <strong>{{ fatura.firma_adi }}</strong> - {{ "%.1f"|format(fatura.miktar) }} kg
+                        <br><small>{{ fatura.hasat_tarihi }} tarihli teslimat</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Birim Fiyat (₺/kg) *</label>
+                        <input type="number" name="birim_fiyat" class="form-control" required 
+                               step="0.01" min="0" placeholder="Örn: 12.50">
+                        <small class="form-text text-muted">
+                            Toplam: {{ "%.1f"|format(fatura.miktar) }} kg × [birim fiyat] = [toplam tutar] ₺
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="3" 
+                                  placeholder="Fiyat belirleme notları, özel koşullar...">{{ fatura.notlar or '' }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-tag me-2"></i>Fiyatlandır
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- Durum Güncelleme Modalleri -->
+{% for fatura in faturalar %}
+{% if fatura.durum in ['Fiyatlandırıldı', 'Faturalandı'] %}
+<div class="modal fade" id="durumModal{{ fatura.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <input type="hidden" name="action" value="update_status">
+                <input type="hidden" name="fatura_id" value="{{ fatura.id }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Durum Güncelleme
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <strong>{{ fatura.firma_adi }}</strong> - {{ "{:,.0f}".format(fatura.toplam_tutar) }} ₺
+                        <br><small>{{ fatura.hasat_tarihi }} tarihli teslimat</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Yeni Durum *</label>
+                        <select name="yeni_durum" class="form-select" required>
+                            {% if fatura.durum == 'Fiyatlandırıldı' %}
+                            <option value="Faturalandı">Faturalandı</option>
+                            {% endif %}
+                            {% if fatura.durum in ['Fiyatlandırıldı', 'Faturalandı'] %}
+                            <option value="Tahsil Edildi">Tahsil Edildi</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check me-2"></i>Güncelle
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endblock %}

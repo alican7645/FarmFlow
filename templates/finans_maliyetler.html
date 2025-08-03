@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Maliyet Takibi - Sera Yönetim Sistemi{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h2 mb-3">
+            <i class="fas fa-receipt me-2"></i>
+            Maliyet Takibi
+        </h1>
+        <p class="text-muted">Tüm operasyonel giderlerin takibi ve maliyet analizi.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('finans') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Finans Ana Sayfa
+            </a>
+            <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#yeniMaliyetModal">
+                <i class="fas fa-plus me-2"></i>Yeni Maliyet
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- İstatistik Kartları -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-warning">Bu Ay Toplam</h6>
+                        <h4 class="mb-0">{{ "{:,.0f}".format(toplam_maliyet) }} ₺</h4>
+                        <small class="text-muted">Maliyet</small>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-receipt fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card border-info">
+            <div class="card-header">
+                <h6 class="mb-0 text-info">Bu Ay Maliyet Türleri</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if bu_ay_maliyetler %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for maliyet in bu_ay_maliyetler %}
+                            <tr>
+                                <td>
+                                    <span class="badge bg-{% if maliyet.maliyet_turu == 'Gübre' %}success{% elif maliyet.maliyet_turu == 'Kutu' %}info{% elif maliyet.maliyet_turu == 'İşçilik' %}primary{% else %}secondary{% endif %}">
+                                        {{ maliyet.maliyet_turu }}
+                                    </span>
+                                </td>
+                                <td>{{ maliyet.adet }} kayıt</td>
+                                <td class="text-end"><strong>{{ "{:,.0f}".format(maliyet.toplam) }} ₺</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <small class="text-muted">Bu ay henüz maliyet kaydı yok</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Maliyet Listesi -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Maliyet Kayıtları
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if maliyetler %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Maliyet Türü</th>
+                        <th>Açıklama</th>
+                        <th>Miktar</th>
+                        <th>Birim Fiyat</th>
+                        <th>Toplam Tutar</th>
+                        <th>Sera/Üretim</th>
+                        <th>Tedarikci</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for maliyet in maliyetler %}
+                    <tr>
+                        <td><strong>{{ maliyet.tarih }}</strong></td>
+                        <td>
+                            <span class="badge bg-{% if maliyet.maliyet_turu == 'Gübre' %}success{% elif maliyet.maliyet_turu == 'Kutu' %}info{% elif maliyet.maliyet_turu == 'Palet' %}warning{% elif maliyet.maliyet_turu == 'İşçilik' %}primary{% elif maliyet.maliyet_turu == 'Elektrik' %}danger{% elif maliyet.maliyet_turu == 'Su' %}info{% else %}secondary{% endif %}">
+                                {{ maliyet.maliyet_turu }}
+                            </span>
+                        </td>
+                        <td>
+                            <strong>{{ maliyet.aciklama }}</strong>
+                            {% if maliyet.fatura_no %}
+                            <br><small class="text-muted">Fatura: {{ maliyet.fatura_no }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if maliyet.miktar > 0 %}
+                            {{ "%.1f"|format(maliyet.miktar) }}
+                            {% if maliyet.birim %}{{ maliyet.birim }}{% endif %}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ "%.2f"|format(maliyet.birim_fiyat) }} ₺
+                            {% if maliyet.birim %}/{{ maliyet.birim }}{% endif %}
+                        </td>
+                        <td><strong class="text-danger">{{ "{:,.0f}".format(maliyet.toplam_tutar) }} ₺</strong></td>
+                        <td>
+                            {% if maliyet.sera_adi %}
+                            <strong>{{ maliyet.sera_adi }}</strong>
+                            {% endif %}
+                            {% if maliyet.uretim_sera_adi and maliyet.urun_adi %}
+                            <br><small class="text-muted">{{ maliyet.uretim_sera_adi }} - {{ maliyet.urun_adi }}</small>
+                            {% endif %}
+                            {% if not maliyet.sera_adi and not maliyet.uretim_sera_adi %}
+                            <span class="text-muted">Genel</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if maliyet.tedarikci %}
+                            {{ maliyet.tedarikci }}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Henüz maliyet kaydı bulunmuyor</h5>
+            <p class="text-muted">İlk maliyet kaydınızı eklemek için "Yeni Maliyet" butonunu kullanın.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Yeni Maliyet Modal -->
+<div class="modal fade" id="yeniMaliyetModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-plus me-2"></i>Yeni Maliyet Kaydı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Maliyet Türü *</label>
+                            <select name="maliyet_turu" class="form-select" required>
+                                <option value="">Tür Seçin</option>
+                                <option value="Gübre">Gübre</option>
+                                <option value="Kutu">Kutu</option>
+                                <option value="Palet">Palet</option>
+                                <option value="İşçilik">İşçilik</option>
+                                <option value="Elektrik">Elektrik</option>
+                                <option value="Su">Su</option>
+                                <option value="Yakıt">Yakıt</option>
+                                <option value="Bakım-Onarım">Bakım-Onarım</option>
+                                <option value="Diğer">Diğer</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tarih *</label>
+                            <input type="date" name="tarih" class="form-control" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Açıklama *</label>
+                        <input type="text" name="aciklama" class="form-control" required 
+                               placeholder="Örn: NPK 15-15-15 Gübresi, Ambalaj Kutusu, İşçi Gündelikleri">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Miktar</label>
+                            <input type="number" name="miktar" class="form-control" 
+                                   step="0.1" min="0" placeholder="Örn: 100">
+                            <small class="form-text text-muted">Opsiyonel (0 = sabit tutar)</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Birim</label>
+                            <select name="birim" class="form-select">
+                                <option value="">Birim Seçin</option>
+                                <option value="kg">kg</option>
+                                <option value="adet">adet</option>
+                                <option value="litre">litre</option>
+                                <option value="saat">saat</option>
+                                <option value="gün">gün</option>
+                                <option value="kWh">kWh</option>
+                                <option value="m3">m³</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Birim Fiyat (₺) *</label>
+                            <input type="number" name="birim_fiyat" class="form-control" required 
+                                   step="0.01" min="0" placeholder="Örn: 15.50">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sera Adı</label>
+                            <input type="text" name="sera_adi" class="form-control" 
+                                   placeholder="Örn: 1 Nolu Sera (Opsiyonel)">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Bağlı Üretim</label>
+                            <select name="uretim_id" class="form-select">
+                                <option value="">Üretim seçin (opsiyonel)</option>
+                                {% for uretim in aktif_uretimler %}
+                                <option value="{{ uretim.id }}">
+                                    {{ uretim.sera_adi }} - {{ uretim.urun_adi }} ({{ uretim.ekim_tarihi }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tedarikci</label>
+                            <input type="text" name="tedarikci" class="form-control" 
+                                   placeholder="Örn: ABC Tarım Ltd.">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Fatura No</label>
+                            <input type="text" name="fatura_no" class="form-control" 
+                                   placeholder="Örn: FT-2024-001">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notlar</label>
+                        <textarea name="notlar" class="form-control" rows="3" 
+                                  placeholder="Ek açıklamalar, özel durumlar..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>Hesaplama:</strong> Miktar × Birim Fiyat = Toplam Tutar. Miktar girilmezse sadece birim fiyat kullanılır.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-save me-2"></i>Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
