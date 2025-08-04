@@ -5,4 +5,4 @@ openpyxl
 psycopg2-binary
 SQLAlchemy
 gunicorn
-flask_sqlalchemygit add requirements.txt
+flask_sqlalchemy
